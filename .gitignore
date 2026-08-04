@@ -3,6 +3,11 @@
 .env.*
 !.env.example
 
+# Circle entity secret recovery file. Losing it locks you out, committing it
+# hands over control of every wallet in the entity.
+*-recovery-file.json
+*.pem
+
 # Dependencies
 node_modules/
 

@@ -12,6 +12,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { randomUUID } = require("crypto");
 
 const { ARC_TESTNET } = require("./config");
 const { makeClient } = require("./signers/circleSigner");
@@ -59,8 +60,11 @@ async function main() {
     console.log(`Created wallet set ${walletSetId}`);
   }
 
+  // An idempotency key means a retry after a network blip reuses the same
+  // wallet instead of quietly creating a second one.
   const walletsRes = await client.createWallets({
     walletSetId,
+    idempotencyKey: randomUUID(),
     blockchains: [ARC_TESTNET.circleBlockchain],
     count: 1,
     accountType: "EOA",

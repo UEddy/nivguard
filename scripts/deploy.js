@@ -30,6 +30,18 @@ async function resolveUsdcAddress() {
 
 async function main() {
   const [deployer] = await ethers.getSigners();
+
+  if (!deployer) {
+    throw new Error(
+      `No deployer account is configured for network "${network.name}".\n` +
+        `Set PRIVATE_KEY in .env to a funded key, then retry.\n` +
+        (network.name === "arcTestnet"
+          ? `Fund it with testnet USDC first: https://faucet.circle.com\n` +
+            `On Arc, USDC is the gas token, so the deployer needs USDC to pay gas.`
+          : "")
+    );
+  }
+
   const owner = (process.env.FIREWALL_OWNER || "").trim() || deployer.address;
 
   if (!ethers.isAddress(owner)) {
