@@ -15,7 +15,9 @@
     "provision": "node agent/provision.js",
     "setup:arc": "node scripts/setupArc.js",
     "preflight": "node scripts/preflight.js",
-    "preflight:arc": "node scripts/preflight.js --network arcTestnet"
+    "preflight:arc": "node scripts/preflight.js --network arcTestnet",
+    "sync:dashboard": "node scripts/syncDashboard.js",
+    "web": "node scripts/serveWeb.js"
   },
   "keywords": [
     "arc",

@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NivGuard console</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #000000;
+    --panel: #0a0a0a;
+    --line: #1e1e1e;
+    --line-soft: #141414;
+    --text: #ffffff;
+    --muted: #8b8b8b;
+    --dim: #5a5a5a;
+    --accent: #4338CA;
+    --accent-lift: #6366f1;
+    --ok: #22c55e;
+    --bad: #ef4444;
+    --warn: #f59e0b;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--accent-lift); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 20px 18px 60px; }
+
+  /* ---------- masthead ---------- */
+  header {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 12px; margin-bottom: 18px;
+  }
+  .brand { font-size: 16px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+  .brand span { color: var(--accent-lift); }
+  .tagline { color: var(--muted); }
+  .spacer { flex: 1 1 auto; }
+
+  .chip {
+    border: 1px solid var(--line); padding: 3px 8px; border-radius: 2px;
+    color: var(--muted); font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  }
+  .chip.live { border-color: var(--accent); color: var(--accent-lift); }
+  .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-lift); margin-right: 6px; vertical-align: middle; }
+  .dot.beat { animation: beat 2s ease-in-out infinite; }
+  @keyframes beat { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+
+  /* ---------- layout ---------- */
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(12, 1fr); }
+  .col-4 { grid-column: span 4; }
+  .col-5 { grid-column: span 5; }
+  .col-7 { grid-column: span 7; }
+  .col-8 { grid-column: span 8; }
+  .col-12 { grid-column: span 12; }
+  @media (max-width: 1000px) { .col-4, .col-5, .col-7, .col-8 { grid-column: span 12; } }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; }
+  .panel-h {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 12px; border-bottom: 1px solid var(--line);
+    font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
+  }
+  .panel-h .n { color: var(--accent-lift); }
+  .panel-b { padding: 12px; }
+
+  /* ---------- key/value rows ---------- */
+  .kv { display: grid; grid-template-columns: 132px 1fr; gap: 4px 10px; }
+  .kv dt { color: var(--dim); }
+  .kv dd { margin: 0; word-break: break-all; }
+
+  .addr { font-size: 12px; }
+  .muted { color: var(--muted); }
+  .dim { color: var(--dim); }
+
+  /* ---------- status ---------- */
+  .status {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 4px 10px; border-radius: 2px; font-weight: 700;
+    letter-spacing: .1em; text-transform: uppercase; font-size: 11px;
+  }
+  .status.active { background: rgba(34,197,94,.1); color: var(--ok); border: 1px solid rgba(34,197,94,.35); }
+  .status.revoked { background: rgba(239,68,68,.12); color: var(--bad); border: 1px solid rgba(239,68,68,.5); }
+
+  /* Revoked must be unmistakable: the whole panel goes red. */
+  .panel.is-revoked { border-color: var(--bad); box-shadow: 0 0 0 1px rgba(239,68,68,.25) inset; }
+  .panel.is-revoked .panel-h { border-bottom-color: rgba(239,68,68,.4); color: var(--bad); }
+  .revoked-banner {
+    display: none;
+    margin-bottom: 12px; padding: 10px 12px;
+    border: 1px solid var(--bad); border-left: 3px solid var(--bad);
+    background: rgba(239,68,68,.09); color: var(--bad);
+    letter-spacing: .04em;
+  }
+  .revoked-banner.show { display: block; }
+  .revoked-banner b { letter-spacing: .12em; text-transform: uppercase; }
+
+  /* ---------- meter ---------- */
+  .meter { height: 6px; background: #161616; border-radius: 2px; overflow: hidden; margin: 8px 0 6px; }
+  .meter i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .4s ease; }
+  .meter.full i { background: var(--bad); }
+  .meter.revoked i { background: var(--bad); opacity: .45; }
+
+  .big { font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+  .big small { font-size: 12px; font-weight: 400; color: var(--dim); letter-spacing: 0; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 4px; }
+  .stat { border: 1px solid var(--line-soft); border-radius: 2px; padding: 8px 10px; }
+  .stat .l { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+  .stat .v { font-size: 15px; font-weight: 700; margin-top: 2px; }
+
+  /* ---------- merchants ---------- */
+  .m-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px; border: 1px solid var(--line-soft); border-radius: 2px; margin-bottom: 8px;
+  }
+  .m-row:last-child { margin-bottom: 0; }
+  .m-row.allow { border-left: 3px solid var(--ok); }
+  .m-row.deny { border-left: 3px solid var(--bad); }
+  .m-tag { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; white-space: nowrap; }
+  .m-row.allow .m-tag { color: var(--ok); }
+  .m-row.deny .m-tag { color: var(--bad); }
+  .m-addr { flex: 1 1 auto; word-break: break-all; font-size: 12px; }
+
+  /* ---------- simulator ---------- */
+  .sim-note { color: var(--muted); margin-bottom: 10px; }
+  label { display: block; color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
+  input, select, button {
+    font-family: var(--mono); font-size: 13px;
+    background: #050505; color: var(--text);
+    border: 1px solid var(--line); border-radius: 2px; padding: 8px 10px; width: 100%;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .field { margin-bottom: 10px; }
+  .row2 { display: grid; grid-template-columns: 1fr 150px; gap: 10px; }
+  @media (max-width: 620px) { .row2 { grid-template-columns: 1fr; } }
+
+  button {
+    background: var(--accent); border-color: var(--accent);
+    font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    cursor: pointer; transition: background .15s ease;
+  }
+  button:hover:not(:disabled) { background: var(--accent-lift); border-color: var(--accent-lift); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .preset {
+    width: auto; padding: 5px 9px; font-size: 11px; letter-spacing: .04em;
+    text-transform: none; font-weight: 400;
+    background: transparent; color: var(--muted); border: 1px solid var(--line);
+  }
+  .preset:hover { background: #111; color: var(--text); border-color: var(--accent); }
+
+  .verdict { margin-top: 12px; border: 1px solid var(--line); border-radius: 2px; padding: 12px; display: none; }
+  .verdict.show { display: block; }
+  .verdict.allowed { border-color: rgba(34,197,94,.5); background: rgba(34,197,94,.07); }
+  .verdict.blocked { border-color: var(--bad); background: rgba(239,68,68,.08); }
+  .verdict .vh { font-size: 17px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+  .verdict.allowed .vh { color: var(--ok); }
+  .verdict.blocked .vh { color: var(--bad); }
+  .verdict .vr { margin-top: 6px; }
+  .verdict .vcode { margin-top: 8px; color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+
+  /* ---------- feed ---------- */
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; color: var(--dim); font-weight: 400; font-size: 11px;
+    text-transform: uppercase; letter-spacing: .08em;
+    padding: 6px 8px; border-bottom: 1px solid var(--line);
+  }
+  td { padding: 8px; border-bottom: 1px solid var(--line-soft); vertical-align: top; font-size: 12px; }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: #0e0e0e; }
+  .amt { font-weight: 700; color: var(--ok); white-space: nowrap; }
+  .nowrap { white-space: nowrap; }
+
+  .empty { padding: 22px; text-align: center; color: var(--dim); }
+  .err {
+    border: 1px solid var(--bad); border-left: 3px solid var(--bad);
+    background: rgba(239,68,68,.08); color: var(--bad);
+    padding: 10px 12px; margin-bottom: 14px; display: none; white-space: pre-wrap;
+  }
+  .err.show { display: block; }
+
+  footer { margin-top: 22px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--dim); font-size: 11px; }
+  .skel { color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">Niv<span>Guard</span></div>
+    <div class="tagline">onchain spend firewall for AI agents</div>
+    <div class="spacer"></div>
+    <div class="chip live"><span class="dot beat"></span><span id="netchip">connecting</span></div>
+    <div class="chip" id="blockchip">block ...</div>
+  </header>
+
+  <div class="err" id="err"></div>
+
+  <div class="revoked-banner" id="revokedBanner">
+    <b>Agent revoked.</b>
+    The owner cut this agent off onchain. It cannot spend again, at any amount,
+    to any merchant. Funds still held for it are recoverable by the owner only.
+  </div>
+
+  <div class="grid">
+
+    <!-- ============ agent + policy ============ -->
+    <section class="panel col-5" id="agentPanel">
+      <div class="panel-h"><span class="n">01</span> Agent and policy</div>
+      <div class="panel-b">
+        <dl class="kv">
+          <dt>agent</dt>
+          <dd class="addr"><a id="agentLink" target="_blank" rel="noopener"><span id="agentAddr" class="skel">loading</span></a></dd>
+          <dt>custody</dt>
+          <dd class="muted">Circle developer-controlled wallet</dd>
+          <dt>firewall</dt>
+          <dd class="addr"><a id="fwLink" target="_blank" rel="noopener"><span id="fwAddr" class="skel">loading</span></a></dd>
+          <dt>status</dt>
+          <dd><span class="status active" id="statusPill">loading</span></dd>
+        </dl>
+
+        <div style="margin-top:14px">
+          <div class="big"><span id="spentBig">0</span> <small>/ <span id="budgetBig">0</span> USDC used this period</small></div>
+          <div class="meter" id="meter"><i id="meterFill"></i></div>
+          <div class="dim" id="periodLine">period ...</div>
+        </div>
+
+        <div class="stats" style="margin-top:12px">
+          <div class="stat"><div class="l">Remaining</div><div class="v" id="remaining">-</div></div>
+          <div class="stat"><div class="l">Max per tx</div><div class="v" id="maxPerTx">-</div></div>
+          <div class="stat"><div class="l">Held</div><div class="v" id="balance">-</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ simulator ============ -->
+    <section class="panel col-7">
+      <div class="panel-h"><span class="n">02</span> Policy simulator <span class="dim" style="text-transform:none;letter-spacing:0">read only, sends nothing</span></div>
+      <div class="panel-b">
+        <div class="sim-note">
+          Ask the firewall what it would do. This calls <code>checkSpend()</code>, a read-only
+          view on the contract, so you can test the policy yourself without a wallet
+          and without spending anything.
+        </div>
+
+        <div class="presets" id="presets"></div>
+
+        <div class="row2">
+          <div class="field">
+            <label for="merchant">Merchant address</label>
+            <input id="merchant" placeholder="0x..." spellcheck="false" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="amount">Amount (USDC)</label>
+            <input id="amount" value="1" inputmode="decimal" autocomplete="off" />
+          </div>
+        </div>
+
+        <button id="simBtn" disabled>Run check</button>
+
+        <div class="verdict" id="verdict">
+          <div class="vh" id="verdictHead"></div>
+          <div class="vr" id="verdictReason"></div>
+          <div class="vcode" id="verdictCode"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ merchants ============ -->
+    <section class="panel col-5">
+      <div class="panel-h"><span class="n">03</span> Merchant allowlist</div>
+      <div class="panel-b" id="merchants">
+        <div class="skel">loading</div>
+      </div>
+    </section>
+
+    <!-- ============ feed ============ -->
+    <section class="panel col-7">
+      <div class="panel-h">
+        <span class="n">04</span> Activity
+        <span class="dim" style="text-transform:none;letter-spacing:0">SpendAuthorized events, the onchain audit trail</span>
+      </div>
+      <div id="feedWrap">
+        <div class="empty skel">loading</div>
+      </div>
+    </section>
+
+  </div>
+
+  <footer>
+    Read-only view of Arc testnet. Every value on this page is read from the chain,
+    not from a database.
+    <span id="footerLinks"></span>
+  </footer>
+
+</div>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// CONFIG
+// Regenerate with:  npm run sync:dashboard
+// (reads deployments/arcTestnet.json and rewrites this block)
+// ---------------------------------------------------------------------------
+const CONFIG = {
+  // Blockscout's JSON-RPC. Used rather than https://rpc.testnet.arc.network
+  // because that endpoint returns no access-control-allow-origin header on
+  // POST responses, so a browser blocks it. This one sends "*" and serves
+  // eth_call and eth_getLogs over the full history without a range cap.
+  rpcUrl: "https://testnet.arcscan.app/api/eth-rpc",
+  chainId: 5042002,
+  explorer: "https://testnet.arcscan.app",
+  spendFirewall: "0x4851d5E24BAaA13d40f5E59D3Ee26d72a05ac4Ec",
+  agent: "0x92b0757aca6192c38fb972ffca6a97d984d3bc9f",
+  deployBlock: 55238998,
+  merchants: {
+    allowed: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+    blocked: "0x90F79bf6EB2c4f870365E785982E1f101E93b906"
+  }
+};
+
+const USDC_DECIMALS = 6;
+const REFRESH_MS = 15000;
+
+// Mirrors the reason codes in SpendFirewall.sol.
+const REASONS = {
+  0: ["OK", "allowed by policy"],
+  1: ["NOT_REGISTERED", "this agent is not registered with the firewall"],
+  2: ["REVOKED", "the owner has revoked this agent, it can never spend again"],
+  3: ["MERCHANT_NOT_ALLOWED", "this merchant is not on the agent's allowlist"],
+  4: ["OVER_MAX_PER_TX", "the amount is above the per transaction cap"],
+  5: ["OVER_PERIOD_BUDGET", "the amount would exceed the budget left this period"],
+  6: ["INSUFFICIENT_BALANCE", "the agent does not hold enough USDC"],
+  7: ["ZERO_AMOUNT", "the amount is zero"]
+};
+
+const ABI = [
+  "function getPolicy(address agent) view returns (bool registered, bool revoked, uint256 budgetPerPeriod, uint256 periodSeconds, uint256 maxPerTx, uint256 periodStart, uint256 periodSpent, uint256 remainingInPeriod, uint256 balance)",
+  "function checkSpend(address agent, address merchant, uint256 amount) view returns (bool allowed, uint8 reasonCode)",
+  "function isMerchantAllowed(address agent, address merchant) view returns (bool)",
+  "event SpendAuthorized(address indexed agent, address indexed merchant, uint256 amount, uint256 periodSpent, uint256 remainingInPeriod)"
+];
+
+const $ = (id) => document.getElementById(id);
+const short = (a) => a ? a.slice(0, 6) + "..." + a.slice(-4) : "";
+const txUrl = (h) => CONFIG.explorer + "/tx/" + h;
+const addrUrl = (a) => CONFIG.explorer + "/address/" + a;
+
+function usdc(v) {
+  return Number(ethers.formatUnits(v, USDC_DECIMALS)).toLocaleString(undefined, {
+    minimumFractionDigits: 0, maximumFractionDigits: 6
+  });
+}
+
+function period(seconds) {
+  const s = Number(seconds);
+  if (s % 86400 === 0) return (s / 86400) + (s === 86400 ? " day" : " days");
+  if (s % 3600 === 0) return (s / 3600) + (s === 3600 ? " hour" : " hours");
+  if (s % 60 === 0) return (s / 60) + " min";
+  return s + "s";
+}
+
+function ago(ts) {
+  const d = Math.floor(Date.now() / 1000) - Number(ts);
+  if (d < 60) return d + "s ago";
+  if (d < 3600) return Math.floor(d / 60) + "m ago";
+  if (d < 86400) return Math.floor(d / 3600) + "h ago";
+  return Math.floor(d / 86400) + "d ago";
+}
+
+function showError(msg) {
+  const el = $("err");
+  el.textContent = msg;
+  el.classList.add("show");
+}
+
+let provider, contract;
+
+async function init() {
+  const net = new ethers.Network("arcTestnet", CONFIG.chainId);
+  provider = new ethers.JsonRpcProvider(CONFIG.rpcUrl, net, { staticNetwork: net });
+  contract = new ethers.Contract(CONFIG.spendFirewall, ABI, provider);
+
+  $("fwAddr").textContent = short(CONFIG.spendFirewall);
+  $("fwAddr").classList.remove("skel");
+  $("fwLink").href = addrUrl(CONFIG.spendFirewall);
+  $("agentAddr").textContent = short(CONFIG.agent);
+  $("agentAddr").classList.remove("skel");
+  $("agentLink").href = addrUrl(CONFIG.agent);
+  $("merchant").value = CONFIG.merchants.allowed;
+
+  $("footerLinks").innerHTML =
+    ' Contract: <a href="' + addrUrl(CONFIG.spendFirewall) + '#code" target="_blank" rel="noopener">verified source</a>.';
+
+  buildPresets();
+
+  $("simBtn").addEventListener("click", runCheck);
+  $("merchant").addEventListener("keydown", (e) => { if (e.key === "Enter") runCheck(); });
+  $("amount").addEventListener("keydown", (e) => { if (e.key === "Enter") runCheck(); });
+
+  await refresh();
+  $("simBtn").disabled = false;
+
+  setInterval(refresh, REFRESH_MS);
+}
+
+function buildPresets() {
+  const items = [
+    ["Allowed merchant, 1 USDC", CONFIG.merchants.allowed, "1"],
+    ["Blocked merchant, 1 USDC", CONFIG.merchants.blocked, "1"],
+    ["Allowed merchant, 2 USDC (over cap)", CONFIG.merchants.allowed, "2"],
+    ["Allowed merchant, 100 USDC", CONFIG.merchants.allowed, "100"]
+  ];
+  const box = $("presets");
+  box.innerHTML = "";
+  for (const [label, m, a] of items) {
+    const b = document.createElement("button");
+    b.className = "preset";
+    b.type = "button";
+    b.textContent = label;
+    b.addEventListener("click", () => {
+      $("merchant").value = m;
+      $("amount").value = a;
+      runCheck();
+    });
+    box.appendChild(b);
+  }
+}
+
+async function refresh() {
+  try {
+    const [block, p] = await Promise.all([
+      provider.getBlockNumber(),
+      contract.getPolicy(CONFIG.agent)
+    ]);
+
+    $("blockchip").textContent = "block " + block.toLocaleString();
+    $("netchip").textContent = "arc testnet " + CONFIG.chainId;
+
+    renderPolicy(p);
+    await renderMerchants();
+    await renderFeed();
+  } catch (e) {
+    showError("Could not read the chain.\n" + (e.shortMessage || e.message));
+  }
+}
+
+function renderPolicy(p) {
+  const revoked = p.revoked;
+  const spent = p.periodSpent;
+  const budget = p.budgetPerPeriod;
+
+  $("spentBig").textContent = usdc(spent);
+  $("budgetBig").textContent = usdc(budget);
+  $("remaining").textContent = usdc(p.remainingInPeriod) + " USDC";
+  $("maxPerTx").textContent = usdc(p.maxPerTx) + " USDC";
+  $("balance").textContent = usdc(p.balance) + " USDC";
+  $("periodLine").textContent =
+    "budget resets every " + period(p.periodSeconds) +
+    (p.registered ? "" : "  |  agent not registered");
+
+  const pct = budget > 0n ? Number((spent * 10000n) / budget) / 100 : 0;
+  const meter = $("meter");
+  $("meterFill").style.width = Math.min(pct, 100) + "%";
+  meter.classList.toggle("full", pct >= 100 && !revoked);
+  meter.classList.toggle("revoked", revoked);
+
+  const pill = $("statusPill");
+  pill.className = "status " + (revoked ? "revoked" : "active");
+  pill.textContent = revoked ? "Revoked" : (p.registered ? "Active" : "Not registered");
+
+  $("agentPanel").classList.toggle("is-revoked", revoked);
+  $("revokedBanner").classList.toggle("show", revoked);
+}
+
+async function renderMerchants() {
+  const entries = [
+    ["allowed", CONFIG.merchants.allowed],
+    ["blocked", CONFIG.merchants.blocked]
+  ];
+
+  // Do not trust the labels in CONFIG. Ask the contract what is actually
+  // allowlisted, so this panel can never disagree with the chain.
+  const states = await Promise.all(
+    entries.map(([, addr]) => contract.isMerchantAllowed(CONFIG.agent, addr))
+  );
+
+  const box = $("merchants");
+  box.innerHTML = "";
+  entries.forEach(([, addr], i) => {
+    const on = states[i];
+    const row = document.createElement("div");
+    row.className = "m-row " + (on ? "allow" : "deny");
+    row.innerHTML =
+      '<span class="m-tag">' + (on ? "ALLOWED" : "BLOCKED") + '</span>' +
+      '<span class="m-addr"><a href="' + addrUrl(addr) + '" target="_blank" rel="noopener">' + addr + '</a></span>';
+    box.appendChild(row);
+  });
+
+  const note = document.createElement("div");
+  note.className = "dim";
+  note.style.marginTop = "10px";
+  note.textContent = "Allowlist is per agent. The firewall rejects any payment to an address not on it.";
+  box.appendChild(note);
+}
+
+async function renderFeed() {
+  const wrap = $("feedWrap");
+  let logs;
+
+  try {
+    logs = await contract.queryFilter(
+      contract.filters.SpendAuthorized(CONFIG.agent),
+      CONFIG.deployBlock,
+      "latest"
+    );
+  } catch (e) {
+    wrap.innerHTML = '<div class="empty">Could not load events: ' + (e.shortMessage || e.message) + '</div>';
+    return;
+  }
+
+  if (!logs.length) {
+    wrap.innerHTML = '<div class="empty">No spends authorised yet. Allowed payments appear here as they happen.</div>';
+    return;
+  }
+
+  // Newest first, and fetch timestamps for the blocks involved.
+  logs = logs.slice().reverse();
+  const blocks = [...new Set(logs.map((l) => l.blockNumber))];
+  const times = {};
+  await Promise.all(blocks.map(async (b) => {
+    try { times[b] = (await provider.getBlock(b)).timestamp; } catch { times[b] = null; }
+  }));
+
+  const rows = logs.map((l) => {
+    const t = times[l.blockNumber];
+    const when = t ? ago(t) : "block " + l.blockNumber;
+    const stamp = t ? new Date(Number(t) * 1000).toISOString().replace("T", " ").slice(0, 19) + " UTC" : "";
+    return '<tr>' +
+      '<td class="nowrap" title="' + stamp + '">' + when + '</td>' +
+      '<td><a href="' + addrUrl(l.args.merchant) + '" target="_blank" rel="noopener">' + short(l.args.merchant) + '</a></td>' +
+      '<td class="amt">' + usdc(l.args.amount) + ' USDC</td>' +
+      '<td class="nowrap"><a href="' + txUrl(l.transactionHash) + '" target="_blank" rel="noopener">' + short(l.transactionHash) + '</a></td>' +
+      '</tr>';
+  }).join("");
+
+  wrap.innerHTML =
+    '<table><thead><tr><th>When</th><th>Merchant</th><th>Amount</th><th>Transaction</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table>';
+}
+
+async function runCheck() {
+  const v = $("verdict");
+  const merchant = $("merchant").value.trim();
+  const amountRaw = $("amount").value.trim();
+
+  const fail = (msg) => {
+    v.className = "verdict show blocked";
+    $("verdictHead").textContent = "Invalid input";
+    $("verdictReason").textContent = msg;
+    $("verdictCode").textContent = "";
+  };
+
+  if (!ethers.isAddress(merchant)) return fail("That is not a valid address.");
+
+  let amount;
+  try {
+    amount = ethers.parseUnits(amountRaw || "0", USDC_DECIMALS);
+  } catch {
+    return fail("That is not a valid USDC amount. USDC has 6 decimal places.");
+  }
+
+  $("simBtn").disabled = true;
+  try {
+    const [allowed, code] = await contract.checkSpend(CONFIG.agent, merchant, amount);
+    const [key, text] = REASONS[Number(code)] || ["UNKNOWN", "unrecognised reason code"];
+
+    v.className = "verdict show " + (allowed ? "allowed" : "blocked");
+    $("verdictHead").textContent = allowed ? "Allowed" : "Blocked";
+    $("verdictReason").textContent = allowed
+      ? "The firewall would let this payment through: " + usdc(amount) + " USDC to " + short(merchant) + "."
+      : "The firewall would reject this payment. Reason: " + text + ".";
+    $("verdictCode").textContent = "checkSpend returned code " + code + "  |  " + key;
+  } catch (e) {
+    fail("Call failed: " + (e.shortMessage || e.message));
+  } finally {
+    $("simBtn").disabled = false;
+  }
+}
+
+init().catch((e) => showError("Startup failed.\n" + (e.shortMessage || e.message)));
+</script>
+</body>
+</html>

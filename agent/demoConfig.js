@@ -41,6 +41,27 @@ const DEMO = {
     postRevoke: USDC(0.5), // payment 5, after revocation
   },
 
+  // Dedicated demo merchants.
+  //
+  // Previously these defaulted to accounts derived from the public hardhat
+  // mnemonic, which anyone on a public testnet can also use. That made
+  // merchant balances read slightly high, because other people's funds landed
+  // in the same address, and the allowlisted merchant no longer showed exactly
+  // what this demo had paid it.
+  //
+  // These are derived deterministically from a NivGuard specific string:
+  //   address = last 20 bytes of keccak256("nivguard.demo.merchant.<role>")
+  //
+  // Nobody holds a key for either, which is fine and in fact the point:
+  // merchants only ever receive, they never sign anything. Balances now read
+  // exactly what the firewall sent.
+  //
+  // Override with MERCHANT_ALLOWED and MERCHANT_BLOCKED for real vendors.
+  merchants: {
+    allowed: "0x2f572D8771Af409Fce73970898974F7d94787386",
+    blocked: "0x3994a61B70C84F18294316764ABFB73588C8763F",
+  },
+
   // Minimum balances preflight insists on before letting the demo run.
   minimums: {
     // Native gas, 18 decimal view. Enough for a handful of transactions.

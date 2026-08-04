@@ -24,14 +24,15 @@ const log = require("../agent/log");
 const DEPLOYMENTS = path.join(__dirname, "..", "deployments");
 
 /// Merchants only ever receive funds, they never sign, so any address works.
-/// Override with MERCHANT_ALLOWED and MERCHANT_BLOCKED for real vendors.
+/// Defaults come from agent/demoConfig.js. Override with MERCHANT_ALLOWED and
+/// MERCHANT_BLOCKED for real vendors.
 function resolveMerchants() {
   const allowed = (process.env.MERCHANT_ALLOWED || "").trim();
   const blocked = (process.env.MERCHANT_BLOCKED || "").trim();
 
   return {
-    allowed: allowed ? ethers.getAddress(allowed) : localAccount(2).address,
-    blocked: blocked ? ethers.getAddress(blocked) : localAccount(3).address,
+    allowed: ethers.getAddress(allowed || DEMO.merchants.allowed),
+    blocked: ethers.getAddress(blocked || DEMO.merchants.blocked),
     fromEnv: Boolean(allowed && blocked),
   };
 }

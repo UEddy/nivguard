@@ -51,8 +51,9 @@ async function setupLocal() {
 
   const owner = await provider.getSigner(0);
   const agentAddress = await accounts[1].getAddress();
-  const allowedMerchant = await accounts[2].getAddress();
-  const blockedMerchant = await accounts[3].getAddress();
+  // Same dedicated merchants the Arc demo uses, so local and Arc match.
+  const allowedMerchant = ethers.getAddress(DEMO.merchants.allowed);
+  const blockedMerchant = ethers.getAddress(DEMO.merchants.blocked);
 
   log.banner("NivGuard local setup");
 
