@@ -1,0 +1,25 @@
+{
+  "name": "nivguard",
+  "version": "1.0.0",
+  "description": "Onchain spend firewall for AI agents, built on Arc",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:gas": "REPORT_GAS=true hardhat test",
+    "deploy:local": "hardhat run scripts/deploy.js",
+    "deploy:arc": "hardhat run scripts/deploy.js --network arcTestnet"
+  },
+  "keywords": [
+    "arc",
+    "usdc",
+    "ai-agents",
+    "solidity"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.6.1",
+    "dotenv": "^17.4.2",
+    "hardhat": "^2.29.0"
+  }
+}
