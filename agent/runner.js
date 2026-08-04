@@ -19,16 +19,14 @@ const {
   fmt,
 } = require("./config");
 const { makeSigner } = require("./signers");
+const { makeProvider } = require("./provider");
 const { describeFailure } = require("./revert");
 const log = require("./log");
 
 /// Build everything the runner needs: provider, contract handle, signer.
 async function createContext({ networkName, localAgentAddress } = {}) {
   const network = getNetwork(networkName);
-  const provider = new ethers.JsonRpcProvider(network.rpcUrl, {
-    chainId: network.chainId,
-    name: network.name,
-  });
+  const provider = makeProvider(network);
 
   const deployment = loadDeployment(network.name);
   const artifact = loadArtifact("SpendFirewall");

@@ -22,9 +22,12 @@ coverage/
 coverage.json
 gas-report.txt
 
-# Deployment records
+# Deployment records. Local and in-process chains are ephemeral, so they stay
+# out. Public testnet addresses are public information and are committed, so a
+# submission reader can find the contract. No keys are ever in these files.
 deployments/*.json
 !deployments/.gitkeep
+!deployments/arcTestnet.json
 
 # Editor and OS
 .vscode/

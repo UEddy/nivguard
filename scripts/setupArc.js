@@ -18,6 +18,7 @@ const { ethers } = require("ethers");
 const { ARC_TESTNET, loadArtifact, fmt } = require("../agent/config");
 const { DEMO, assertCoherent } = require("../agent/demoConfig");
 const { getOwnerSigner, localAccount } = require("../agent/wallet");
+const { makeProvider } = require("../agent/provider");
 const log = require("../agent/log");
 
 const DEPLOYMENTS = path.join(__dirname, "..", "deployments");
@@ -59,10 +60,7 @@ async function main() {
 
   const { file, record } = readDeployment();
 
-  const provider = new ethers.JsonRpcProvider(ARC_TESTNET.rpcUrl, {
-    chainId: ARC_TESTNET.chainId,
-    name: ARC_TESTNET.name,
-  });
+  const provider = makeProvider(ARC_TESTNET);
 
   const owner = getOwnerSigner({
     provider,

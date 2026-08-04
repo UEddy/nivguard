@@ -16,6 +16,7 @@ const { ethers } = require("ethers");
 const { getNetwork, loadArtifact, fmt } = require("../agent/config");
 const { DEMO, assertCoherent } = require("../agent/demoConfig");
 const { getOwnerSigner } = require("../agent/wallet");
+const { makeProvider } = require("../agent/provider");
 const log = require("../agent/log");
 
 const PASS = "PASS";
@@ -181,10 +182,7 @@ async function main() {
   // ---------------------------------------------------------------
   // 3. Chain reachable, contract deployed
   // ---------------------------------------------------------------
-  const provider = new ethers.JsonRpcProvider(network.rpcUrl, {
-    chainId: network.chainId,
-    name: network.name,
-  });
+  const provider = makeProvider(network);
 
   try {
     const live = await provider.getNetwork();
