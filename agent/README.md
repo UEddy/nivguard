@@ -121,11 +121,38 @@ This creates a wallet set and one EOA wallet on `ARC-TESTNET`, then writes
 
 ### 5. Fund and register the agent
 
-Fund the printed address with testnet USDC from https://faucet.circle.com,
-since on Arc USDC is also the gas token.
+Fund two addresses from https://faucet.circle.com. On Arc, USDC is also the
+gas token, so an agent with no USDC cannot transact at all.
 
-Then, as the firewall owner, register that address as an agent and allowlist
-the merchants it may pay.
+| Address | Needs | Why |
+| --- | --- | --- |
+| owner (your `PRIVATE_KEY`) | about 6 USDC | 5 to deposit, the rest for gas |
+| agent (from `provision.js`) | about 1 USDC | gas only, it spends from the firewall |
+
+Then register the agent and allowlist merchants:
+
+```bash
+npm run deploy:arc
+npm run setup:arc
+```
+
+`setup:arc` registers the Circle wallet under the demo policy, allowlists one
+merchant, deliberately leaves another off, deposits USDC, and writes
+`deployments/arcTestnet.json` in the same shape the local demo uses. It is
+safe to re-run: an already registered agent has its policy updated instead.
+
+Override the demo merchants with `MERCHANT_ALLOWED` and `MERCHANT_BLOCKED`.
+
+### 5b. Preflight
+
+```bash
+npm run preflight:arc
+```
+
+Checks keys, funding on both addresses, contract deployment, agent
+registration, deposit and the merchant allowlist. It names whatever is missing
+and exits non-zero, so you find out before the camera is rolling rather than
+four payments in.
 
 ### 6. Run against Arc
 
@@ -135,6 +162,25 @@ node agent/demo.js --network arcTestnet
 
 Use the `--network` flag rather than an environment variable prefix, since
 PowerShell has no inline `VAR=x cmd` form.
+
+## Demo amounts
+
+Every number the demo uses lives in one file, `agent/demoConfig.js`. The local
+demo and the Arc demo both read it, so they cannot drift apart.
+
+The defaults are sized for testnet faucet reality, single digit USDC:
+
+| | |
+| --- | --- |
+| budget per period | 3 USDC per hour |
+| max per transaction | 1 USDC |
+| deposited to the agent | 5 USDC |
+| payment 3 asks for | 2 USDC, over the cap |
+
+Three payments of 1 USDC exhaust the budget exactly, which is what makes the
+period limit visible. `demoConfig.js` self-checks on load and throws if an
+edit breaks the shape of the demo, for example a `maxPerTx` that payment 3 no
+longer exceeds.
 
 ## Amounts and decimals
 

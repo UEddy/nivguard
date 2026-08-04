@@ -12,7 +12,10 @@
     "setup:local": "node agent/setupLocal.js",
     "demo": "node agent/demo.js",
     "demo:arc": "node agent/demo.js --network arcTestnet",
-    "provision": "node agent/provision.js"
+    "provision": "node agent/provision.js",
+    "setup:arc": "node scripts/setupArc.js",
+    "preflight": "node scripts/preflight.js",
+    "preflight:arc": "node scripts/preflight.js --network arcTestnet"
   },
   "keywords": [
     "arc",

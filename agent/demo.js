@@ -18,14 +18,16 @@ const { ethers } = require("ethers");
 
 const { fmt, describeReason } = require("./config");
 const { createContext, runJob, readPolicy } = require("./runner");
+const { getOwnerSigner } = require("./wallet");
+const { DEMO, assertCoherent } = require("./demoConfig");
 const log = require("./log");
 
-const USDC = (whole) => BigInt(Math.round(whole * 1_000_000));
+assertCoherent();
 
-const SMALL_PAYMENT = USDC(100);
-const OVER_CAP_PAYMENT = USDC(300); // policy caps a single tx at 250
-const TOP_UP = USDC(250); // exactly the per-tx cap
-const POST_REVOKE_PAYMENT = USDC(50);
+const SMALL_PAYMENT = DEMO.payments.first;
+const OVER_CAP_PAYMENT = DEMO.payments.overCap;
+const TOP_UP = DEMO.payments.topUp;
+const POST_REVOKE_PAYMENT = DEMO.payments.postRevoke;
 
 /// Read --network <name> or --network=<name> from argv. A flag beats the env
 /// var, and both beat the default. PowerShell has no inline "VAR=x cmd" form,
@@ -149,12 +151,19 @@ async function main() {
   // ------------------------------------------------------------------
   log.banner("PAYMENT 5: the owner pulls the kill switch");
 
-  const owner = await ctx.provider.getSigner(deployment.owner);
+  // A real Wallet signer, not an unlocked node account. Arc has no unlocked
+  // accounts, so this is what makes the kill switch work on any network.
+  const owner = getOwnerSigner({
+    provider: ctx.provider,
+    networkName: network.name,
+    expectedOwner: deployment.owner,
+  });
+
   const revokeTx = await firewall.connect(owner).revokeAgent(signer.address);
   await revokeTx.wait();
 
   log.blank();
-  log.field("owner", deployment.owner);
+  log.field("owner", `${deployment.owner}  ${log.c.grey(`(${owner.sourceLabel})`)}`);
   log.field("action", log.c.yellow(`revokeAgent(${signer.address})`));
   log.field("tx", revokeTx.hash);
   log.note("Revocation is one transaction and takes effect immediately.");

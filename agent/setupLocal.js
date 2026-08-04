@@ -16,13 +16,15 @@ const { ethers } = require("ethers");
 const { LOCALHOST, loadArtifact, fmt } = require("./config");
 const log = require("./log");
 
-// Policy for the demo. Chosen so the scripted sequence lands exactly on each
-// block path: 1000 budget with a 250 per-tx cap means payment 4 can exhaust
-// the period in whole steps.
-const BUDGET_PER_PERIOD = 1_000_000_000n; // 1000 USDC at 6 decimals
-const PERIOD_SECONDS = 3600n; // one hour
-const MAX_PER_TX = 250_000_000n; // 250 USDC
-const AGENT_FUNDING = 5_000_000_000n; // 5000 USDC, never the binding limit
+// All demo numbers live in agent/demoConfig.js so local and Arc cannot drift.
+const { DEMO, assertCoherent } = require("./demoConfig");
+
+assertCoherent();
+
+const BUDGET_PER_PERIOD = DEMO.policy.budgetPerPeriod;
+const PERIOD_SECONDS = BigInt(DEMO.policy.periodSeconds);
+const MAX_PER_TX = DEMO.policy.maxPerTx;
+const AGENT_FUNDING = DEMO.funding.agentDeposit;
 
 /// Deploy and configure a fresh firewall on the local node.
 /// Called directly by the operator, and by demo.js so every demo run starts
