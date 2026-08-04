@@ -1,0 +1,30 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Hardhat build output
+artifacts/
+cache/
+typechain/
+typechain-types/
+
+# Coverage and gas reports
+coverage/
+coverage.json
+gas-report.txt
+
+# Deployment records
+deployments/*.json
+!deployments/.gitkeep
+
+# Editor and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
