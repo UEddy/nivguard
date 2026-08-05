@@ -18,7 +18,11 @@ Final submission 9 August 2026.
 
 ## Dashboard
 
-**https://ueddy.github.io/nivguard/** — live, no install, no wallet needed.
+**https://nivguard.netlify.app**
+
+Live, no install, no wallet needed. Mirror:
+[ueddy.github.io/nivguard](https://ueddy.github.io/nivguard/), the same file
+served from GitHub Pages.
 
 An operator console that reads the firewall live from Arc testnet: the agent's
 policy and remaining budget, the merchant allowlist, an activity feed built

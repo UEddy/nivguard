@@ -1,0 +1,14 @@
+# Netlify build settings for the NivGuard dashboard.
+#
+# Kept here rather than only in the Netlify UI so the deploy is reproducible
+# from the repository alone. This file wins over the dashboard settings, so
+# the two cannot silently drift apart.
+#
+# The dashboard is a single self-contained file that reads Arc testnet
+# directly from the browser. There is nothing to compile, so the build command
+# is deliberately empty: without it Netlify can infer a build from the root
+# package.json, which is Hardhat tooling and has no business running here.
+
+[build]
+  publish = "web"
+  command = ""

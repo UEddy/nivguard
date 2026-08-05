@@ -343,4 +343,7 @@ web/
 test/
   SpendFirewall.test.js
 hardhat.config.js
+netlify.toml             publishes web/ to Netlify, the primary demo URL
+.github/workflows/
+  pages.yml              publishes web/ to GitHub Pages, the mirror
 ```
