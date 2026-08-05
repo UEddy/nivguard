@@ -196,6 +196,25 @@
   }
   .err.show { display: block; }
 
+  /* Which agent is on screen. The recorded demo ends with its agent revoked,
+     so the dashboard deliberately shows a different, live one. Say so plainly
+     rather than leaving a judge to work out why the addresses differ. */
+  .which {
+    border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    background: rgba(67,56,202,.08);
+    padding: 10px 12px; margin-bottom: 14px; color: var(--muted);
+  }
+  .which b { color: var(--text); letter-spacing: .12em; text-transform: uppercase; }
+  .which a { word-break: break-all; }
+  .which .sub { display: block; margin-top: 5px; color: var(--dim); }
+
+  .tag {
+    display: inline-block; margin-left: 8px; padding: 2px 7px; border-radius: 2px;
+    font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    background: rgba(34,197,94,.1); color: var(--ok); border: 1px solid rgba(34,197,94,.35);
+    vertical-align: middle;
+  }
+
   footer { margin-top: 22px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--dim); font-size: 11px; }
   .skel { color: var(--dim); }
 </style>
@@ -213,6 +232,16 @@
 
   <div class="err" id="err"></div>
 
+  <div class="which" id="whichAgent">
+    <b>You are looking at Agent B, the live agent.</b>
+    <span class="sub">
+      Registered under the same policy on the same SpendFirewall contract, and
+      deliberately left active so the simulator and the activity feed below have
+      something real to show.
+    </span>
+    <span class="sub" id="demoAgentLine"></span>
+  </div>
+
   <div class="revoked-banner" id="revokedBanner">
     <b>Agent revoked.</b>
     The owner cut this agent off onchain. It cannot spend again, at any amount,
@@ -227,7 +256,10 @@
       <div class="panel-b">
         <dl class="kv">
           <dt>agent</dt>
-          <dd class="addr"><a id="agentLink" target="_blank" rel="noopener"><span id="agentAddr" class="skel">loading</span></a></dd>
+          <dd class="addr">
+            <a id="agentLink" target="_blank" rel="noopener"><span id="agentAddr" class="skel">loading</span></a>
+            <span class="tag" id="agentTag">Agent B &middot; live</span>
+          </dd>
           <dt>custody</dt>
           <dd class="muted">Circle developer-controlled wallet</dd>
           <dt>firewall</dt>
@@ -328,12 +360,17 @@ const CONFIG = {
   rpcUrl: "https://testnet.arcscan.app/api/eth-rpc",
   chainId: 5042002,
   explorer: "https://testnet.arcscan.app",
-  spendFirewall: "0x4851d5E24BAaA13d40f5E59D3Ee26d72a05ac4Ec",
-  agent: "0x92b0757aca6192c38fb972ffca6a97d984d3bc9f",
-  deployBlock: 55238998,
+  spendFirewall: "0x28412A523b9e1D13b1D108bF39Ab3A49035cd248",
+  agent: "0xc2540bd8052aad62a600994f376cadec524e9c2c",
+  // The agent the recorded demo revoked, if there was one. The dashboard names
+  // it so the address in the video is traceable from the live page. Optional:
+  // a deployment that has never had a demo run against it simply has no such
+  // agent, and the dashboard leaves the line out.
+  demoAgent: "0xa2429471b76C16135CEeb05b89e86dD2ccF7BCd1",
+  deployBlock: 55416501,
   merchants: {
-    allowed: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
-    blocked: "0x90F79bf6EB2c4f870365E785982E1f101E93b906"
+    allowed: "0x2f572D8771Af409Fce73970898974F7d94787386",
+    blocked: "0x3994a61B70C84F18294316764ABFB73588C8763F"
   }
 };
 
@@ -409,6 +446,17 @@ async function init() {
 
   $("footerLinks").innerHTML =
     ' Contract: <a href="' + addrUrl(CONFIG.spendFirewall) + '#code" target="_blank" rel="noopener">verified source</a>.';
+
+  // The recorded demo ends by revoking its agent, so that agent is a dead end
+  // for a live dashboard. Name it anyway, so the address in the video is
+  // traceable from here rather than looking like a mismatch.
+  if (CONFIG.demoAgent) {
+    $("demoAgentLine").innerHTML =
+      'The agent from the recorded demo, <a href="' + addrUrl(CONFIG.demoAgent) +
+      '" target="_blank" rel="noopener">' + CONFIG.demoAgent + '</a>, was revoked ' +
+      'at the end of that run and can never spend again. Same contract, same policy, ' +
+      'different agent.';
+  }
 
   buildPresets();
 
@@ -489,6 +537,15 @@ function renderPolicy(p) {
 
   $("agentPanel").classList.toggle("is-revoked", revoked);
   $("revokedBanner").classList.toggle("show", revoked);
+
+  // The "live" label is a claim about chain state, so read it off chain state
+  // rather than hard coding it. If this dashboard is ever pointed at a revoked
+  // agent, the label has to say so instead of quietly being wrong.
+  const tag = $("agentTag");
+  tag.textContent = revoked ? "Agent · revoked" : "Agent B · live";
+  tag.style.background = revoked ? "rgba(239,68,68,.12)" : "rgba(34,197,94,.1)";
+  tag.style.color = revoked ? "var(--bad)" : "var(--ok)";
+  tag.style.borderColor = revoked ? "rgba(239,68,68,.5)" : "rgba(34,197,94,.35)";
 }
 
 async function renderMerchants() {

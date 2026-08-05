@@ -14,6 +14,8 @@
     "demo:arc": "node agent/demo.js --network arcTestnet",
     "provision": "node agent/provision.js",
     "setup:arc": "node scripts/setupArc.js",
+    "fund:agent": "node scripts/fundAgent.js",
+    "pay:arc": "node scripts/agentPay.js",
     "preflight": "node scripts/preflight.js",
     "preflight:arc": "node scripts/preflight.js --network arcTestnet",
     "sync:dashboard": "node scripts/syncDashboard.js",

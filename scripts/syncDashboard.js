@@ -61,6 +61,11 @@ async function main() {
   explorer: ${JSON.stringify(ARC_TESTNET.explorer)},
   spendFirewall: ${JSON.stringify(ethers.getAddress(record.spendFirewall))},
   agent: ${JSON.stringify(record.agent)},
+  // The agent the recorded demo revoked, if there was one. The dashboard names
+  // it so the address in the video is traceable from the live page. Optional:
+  // a deployment that has never had a demo run against it simply has no such
+  // agent, and the dashboard leaves the line out.
+  demoAgent: ${JSON.stringify(record.demoAgent || null)},
   deployBlock: ${deployBlock},
   merchants: {
     allowed: ${JSON.stringify(ethers.getAddress(record.merchants.allowed))},

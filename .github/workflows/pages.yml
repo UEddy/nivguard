@@ -1,0 +1,44 @@
+name: Deploy dashboard to GitHub Pages
+
+# Publishes web/ so the NivGuard console has a public URL a judge can open
+# without cloning anything. The dashboard is a single self-contained file that
+# reads Arc testnet directly from the browser, so there is nothing to build:
+# the job just uploads the directory.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/pages.yml"
+  # So the site can be republished without an unrelated commit to web/.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time. Never cancel one in flight, or the site can be left
+# serving a half-published state.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

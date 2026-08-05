@@ -133,9 +133,73 @@ confirmation and never poll for more.
 | --- | --- |
 | Chain ID | `5042002` |
 | RPC | `https://rpc.testnet.arc.network` |
+| Browser RPC | `https://testnet.arcscan.app/api/eth-rpc` |
 | Explorer | `https://testnet.arcscan.app` |
 | USDC (ERC-20) | `0x3600000000000000000000000000000000000000` |
 | Faucet | `https://faucet.circle.com` |
+
+### The public RPC cannot be called from a browser
+
+`https://rpc.testnet.arc.network` **sends no `access-control-allow-origin`
+header on POST responses**, so a browser refuses to hand the response to page
+JavaScript. Node is unaffected, because CORS is a browser policy and nothing
+else enforces it. This is why the dashboard and the scripts talk to two
+different endpoints, which otherwise looks like an inconsistency.
+
+The response itself is fine. Asked for `eth_chainId` with an `Origin` header
+set, the direct RPC answers correctly and omits the CORS header entirely:
+
+```
+$ curl -i -X POST https://rpc.testnet.arc.network \
+    -H 'Origin: https://ueddy.github.io' \
+    -H 'Content-Type: application/json' \
+    --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}'
+
+HTTP/1.1 200 OK
+content-type: application/json
+                                  <- no access-control-allow-origin
+{"jsonrpc":"2.0","id":1,"result":"0x4cef52"}
+```
+
+A JSON-RPC POST carries `Content-Type: application/json`, which is not a CORS
+simple content type, so the browser sends a preflight `OPTIONS` first. That
+fails even earlier: the endpoint has no `OPTIONS` handler and parses the
+preflight as if it were a JSON-RPC call.
+
+```
+$ curl -i -X OPTIONS https://rpc.testnet.arc.network \
+    -H 'Origin: https://ueddy.github.io' \
+    -H 'Access-Control-Request-Method: POST' \
+    -H 'Access-Control-Request-Headers: content-type'
+
+HTTP/1.1 400 Bad Request
+{"jsonrpc":"2.0","id":null,"error":{"code":-32602,"message":"invalid params"}}
+```
+
+So the request never reaches the POST stage. In the browser console this
+surfaces as an opaque CORS failure with no status code, which reads like the
+node being down rather than a missing header.
+
+The fix is Blockscout's JSON-RPC endpoint, `https://testnet.arcscan.app/api/eth-rpc`,
+which answers the same calls and sends `access-control-allow-origin: *`:
+
+```
+HTTP/1.1 200 OK
+access-control-allow-origin: *
+access-control-allow-credentials: true
+{"jsonrpc":"2.0","result":"0x4cef52","id":1}
+```
+
+It serves `eth_call` and `eth_getLogs` over the full history with no block
+range cap, which is everything the dashboard needs: `checkSpend` and
+`getPolicy` are `eth_call`, and the activity feed is `eth_getLogs` from the
+deployment block. It is rate limited (180 requests per window, advertised in
+`x-ratelimit-limit`), which the dashboard stays well inside by polling every
+15 seconds.
+
+`scripts/syncDashboard.js` therefore writes the Blockscout URL into the
+dashboard's `CONFIG`, never `network.rpcUrl`. Node-side code keeps using the
+direct RPC, which is faster and has no such limit.
 
 ## Setup
 
@@ -260,8 +324,22 @@ Not built yet: the dashboard UI and the agent runner.
 contracts/
   SpendFirewall.sol      the firewall
   test/MockUSDC.sol      6 decimal test token, never deployed live
+agent/
+  runner.js              the loop an autonomous agent runs
+  demo.js                the scripted five-payment narrative
+  demoConfig.js          every demo number, in one place
+  provision.js           create the Circle agent wallet
+  signers/               Circle and local signing backends
 scripts/
-  deploy.js
+  deploy.js              deploy the firewall
+  fundAgent.js           send a new agent wallet its gas
+  setupArc.js            register, allowlist, deposit
+  preflight.js           check everything before a recorded run
+  agentPay.js            routine in-policy payments, revokes nothing
+  syncDashboard.js       rewrite the dashboard CONFIG from the deployment
+  serveWeb.js            serve web/ locally
+web/
+  index.html             the operator console, one self-contained file
 test/
   SpendFirewall.test.js
 hardhat.config.js

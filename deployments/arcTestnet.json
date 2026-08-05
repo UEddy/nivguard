@@ -1,22 +1,23 @@
 {
   "network": "arcTestnet",
   "chainId": 5042002,
-  "spendFirewall": "0x4851d5E24BAaA13d40f5E59D3Ee26d72a05ac4Ec",
+  "spendFirewall": "0x28412A523b9e1D13b1D108bF39Ab3A49035cd248",
   "usdc": "0x3600000000000000000000000000000000000000",
   "usdcIsMock": false,
   "owner": "0x684C426DD7c2652592cF85116702D50f3e326a95",
   "deployer": "0x684C426DD7c2652592cF85116702D50f3e326a95",
-  "deployTx": "0x8e2261b4c2117e4a4065ee93b6803d7a625e5710c9e85f44b37566e83088ffc6",
-  "timestamp": "2026-08-04T08:05:22.999Z",
-  "agent": "0x92b0757aca6192c38fb972ffca6a97d984d3bc9f",
+  "deployTx": "0xada74c3a640ea9112da7a1e426fd78b052ae3df8fb8146cf75f53440c7cd643d",
+  "timestamp": "2026-08-05T09:13:39.036Z",
+  "agent": "0xc2540bd8052aad62a600994f376cadec524e9c2c",
+  "demoAgent": "0xa2429471b76C16135CEeb05b89e86dD2ccF7BCd1",
   "merchants": {
-    "allowed": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
-    "blocked": "0x90F79bf6EB2c4f870365E785982E1f101E93b906"
+    "allowed": "0x2f572D8771Af409Fce73970898974F7d94787386",
+    "blocked": "0x3994a61B70C84F18294316764ABFB73588C8763F"
   },
   "policy": {
     "budgetPerPeriod": "3000000",
     "periodSeconds": 3600,
     "maxPerTx": "1000000"
   },
-  "setupTimestamp": "2026-08-04T08:08:50.908Z"
+  "setupTimestamp": "2026-08-05T09:25:55.194Z"
 }
