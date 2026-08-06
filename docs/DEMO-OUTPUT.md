@@ -1,7 +1,7 @@
 # NivGuard live demo on Arc testnet
 
 An AI agent spending real money on a real chain, with a spending policy
-enforced in front of it. Recorded run, Arc public testnet, 5 August 2026.
+enforced in front of it. Recorded run, Arc public testnet, 6 August 2026.
 
 Every payment below was decided by a smart contract. No human approved any of
 them. The agent signs its own transactions through a Circle custodial wallet
@@ -29,7 +29,7 @@ agent attempts every payment for real, and the chain decides.
 | What | Address |
 | --- | --- |
 | SpendFirewall contract | [`0x28412A523b9e1D13b1D108bF39Ab3A49035cd248`](https://testnet.arcscan.app/address/0x28412A523b9e1D13b1D108bF39Ab3A49035cd248) |
-| Agent A, Circle custody, revoked in this run | [`0xa2429471b76C16135CEeb05b89e86dD2ccF7BCd1`](https://testnet.arcscan.app/address/0xa2429471b76C16135CEeb05b89e86dD2ccF7BCd1) |
+| Agent, Circle custody, revoked in this run | [`0x0ffbcf5360e32Ef47217f2437e6B4f649017abA4`](https://testnet.arcscan.app/address/0x0ffbcf5360e32Ef47217f2437e6B4f649017abA4) |
 | Owner, the business | [`0x684C426DD7c2652592cF85116702D50f3e326a95`](https://testnet.arcscan.app/address/0x684C426DD7c2652592cF85116702D50f3e326a95) |
 | Merchant A, allowlisted | [`0x2f572D8771Af409Fce73970898974F7d94787386`](https://testnet.arcscan.app/address/0x2f572D8771Af409Fce73970898974F7d94787386) |
 | Merchant B, not allowlisted | [`0x3994a61B70C84F18294316764ABFB73588C8763F`](https://testnet.arcscan.app/address/0x3994a61B70C84F18294316764ABFB73588C8763F) |
@@ -39,13 +39,12 @@ Network: Arc testnet, chain ID `5042002`, explorer https://testnet.arcscan.app
 
 **The contract source is verified on the explorer**, so you can read exactly
 what enforced these decisions without trusting this document:
-https://testnet.arcscan.app/address/0x28412A523b9e1D13b1D108bF39Ab3A49035cd248#code
+https://testnet.arcscan.app/address/0x28412A523b9e1D13b1D108bF39Ab3A49035cd248?tab=contract
 
 The two merchants are dedicated demo addresses, derived deterministically as
 the last 20 bytes of `keccak256("nivguard.demo.merchant.allowed")` and
 `keccak256("nivguard.demo.merchant.blocked")`. Nobody holds a key for either,
-which is the point: merchants only ever receive, they never sign. Their
-balances therefore show exactly what this run paid them and nothing else.
+which is the point: merchants only ever receive, they never sign.
 
 ## Result at a glance
 
@@ -61,6 +60,20 @@ balances therefore show exactly what this run paid them and nothing else.
 
 **3 allowed, 4 blocked, out of 7 attempts.**
 
+Four distinct reason codes fired, one per blocked payment:
+
+| Code | Name | Payment |
+| --- | --- | --- |
+| 0 | `OK` | 1, 4.1, 4.2 |
+| 2 | `REVOKED` | 5 |
+| 3 | `MERCHANT_NOT_ALLOWED` | 2 |
+| 4 | `OVER_MAX_PER_TX` | 3 |
+| 5 | `OVER_PERIOD_BUDGET` | 4.3 |
+
+Codes 1 `NOT_REGISTERED`, 6 `INSUFFICIENT_BALANCE` and 7 `ZERO_AMOUNT` are
+implemented and tested but do not fire in this run, because the agent is
+registered, funded above its budget, and never asks for zero.
+
 ## Transactions
 
 Only allowed payments produce a transaction. A blocked payment is rejected by
@@ -74,26 +87,29 @@ revert first and refused to broadcast.
 
 | Payment | Amount | Block | Transaction |
 | --- | --- | --- | --- |
-| 1 | 1 USDC | 55416769 | [`0x794252e4...fff8889d9`](https://testnet.arcscan.app/tx/0x794252e48bf66431626e5e103cb1a4fb7d9cb0e290dc430d9c06d92fff8889d9) |
-| 4.1 | 1 USDC | 55416792 | [`0x79dd03b7...9bf6e3e1b`](https://testnet.arcscan.app/tx/0x79dd03b717d38c373001ebcb60843461d27f5133602ea8c854b10c39bf6e3e1b) |
-| 4.2 | 1 USDC | 55416801 | [`0xcc11bb0a...ecf6bfec9`](https://testnet.arcscan.app/tx/0xcc11bb0abe37fc19d8c525300ec7ef4592c9cab3487d9c115d474c8ecf6bfec9) |
+| 1 | 1 USDC | 55566085 | [`0x533815a6...ff5ae078`](https://testnet.arcscan.app/tx/0x533815a695c4c1e32a2603f27ddd5ca924c9d7618b5cc8b0d2dfae50ff5ae078) |
+| 4.1 | 1 USDC | 55566242 | [`0xc2492791...c7f9b1ea`](https://testnet.arcscan.app/tx/0xc249279195f82cfb1cfb72fd6c5569c8d041dd458ce39d0756545d28c7f9b1ea) |
+| 4.2 | 1 USDC | 55566280 | [`0x4d48341f...1420b045`](https://testnet.arcscan.app/tx/0x4d48341fba73452c11acab49e8235de1d278c104cc978d3bd81837df1420b045) |
 
 ### The owner's kill switch
 
 | Action | Block | Transaction |
 | --- | --- | --- |
-| revokeAgent | 55416824 | [`0xe023817f...b58e58a4`](https://testnet.arcscan.app/tx/0xe023817f9efc415b2577ab8816f2575d81a3733f7473243eb91e0b20b58e58a4) |
+| revokeAgent | 55566353 | [`0xf8df9edd...a11a8fe1`](https://testnet.arcscan.app/tx/0xf8df9eddd4f2d992a1e8be292dd41a2b2737ffa9bc22b20f7cc20d01a11a8fe1) |
 
 ### Setup, before the agent ran
 
 | Step | Block | Transaction |
 | --- | --- | --- |
 | deploy SpendFirewall | 55416501 | [`0xada74c3a...0c7cd643d`](https://testnet.arcscan.app/tx/0xada74c3a640ea9112da7a1e426fd78b052ae3df8fb8146cf75f53440c7cd643d) |
-| fund the agent with gas | 55416608 | [`0x53b91091...533fe76d7`](https://testnet.arcscan.app/tx/0x53b91091b8f09b6cf0bffef164f5f614b7dc041541c672fa90f486f533fe76d7) |
-| registerAgent | 55416646 | [`0xb60229ee...77f52a315`](https://testnet.arcscan.app/tx/0xb60229eef16ee4c25bea869bdd84642b093d19a50c5ea2a3d9c0bab77f52a315) |
-| allowlist merchant A | 55416651 | [`0xc7c3816c...99f76b9e3b`](https://testnet.arcscan.app/tx/0xc7c3816ce27823b94e038351512597bcfecb1f4ea659becafd10a999f76b9e3b) |
-| approve USDC | 55416659 | [`0x41def395...5022ab8e5c`](https://testnet.arcscan.app/tx/0x41def3950dff9a4bdb11529c085f760e821bf6300d13130c3b8e495022ab8e5c) |
-| deposit 5 USDC | 55416668 | [`0x98da9c63...1ad3b06cad`](https://testnet.arcscan.app/tx/0x98da9c6394b9ee003348747ce0ef4cf70bc6951368111189924d921ad3b06cad) |
+| fund the agent with gas | 55565566 | [`0xc01b4d09...f95ea5d8a`](https://testnet.arcscan.app/tx/0xc01b4d0934ccb3e19e0d932dfc9a7885211fb437617932ed3975714f95ea5d8a) |
+| registerAgent | 55565623 | [`0xca013179...b5ef8705e`](https://testnet.arcscan.app/tx/0xca013179ef12be32df1f023b82fdc9b0a0dfad124ec06b6c2133902b5ef8705e) |
+| allowlist merchant A | 55565633 | [`0xad7ed481...289ca0989`](https://testnet.arcscan.app/tx/0xad7ed481a256eb00e2a801a84bc5086536c8ed3f9742a2d98f8540d289ca0989) |
+| approve USDC | 55565661 | [`0x5d1addde...762fc24e`](https://testnet.arcscan.app/tx/0x5d1addde89ebec12855a395cace2cd246f13ac9877a9c307e49a6b7d762fc24e) |
+| deposit 5 USDC | 55565679 | [`0xbf0c16b4...092adc21`](https://testnet.arcscan.app/tx/0xbf0c16b45d8df9c0fefe141394ef67cb82e1709b9e57a1c132a3f4d4092adc21) |
+
+The contract itself was deployed on 5 August and is reused across runs, which
+is why its block number is far below the rest.
 
 The agent's wallet is created empty. On Arc the gas token is USDC, so it
 needs a gas balance before it can broadcast anything at all. That is the
@@ -107,47 +123,48 @@ the firewall under a policy, which is the whole point.
 Read straight off the chain after the run, not from the program's own output.
 
 ```
-merchant A (allowlisted) ERC-20 USDC: 3
-merchant B (blocked)     ERC-20 USDC: 0
-
-agent               0xa2429471b76c16135ceeb05b89e86dd2ccf7bcd1
+agent               0x0ffbcf5360e32Ef47217f2437e6B4f649017abA4
 registered          true
 agent revoked       true
 period spent        3 USDC
 remaining           0 USDC
 balance in firewall 2 USDC
+outgoing tx count   3
+
+SpendAuthorized events for this agent: 3, totalling exactly 3 USDC
+merchant B (blocked) ERC-20 USDC: 0
 ```
 
-Merchant A received exactly 3 USDC, the three allowed payments and nothing
-else. Merchant B, the target of the blocked payment, received **nothing at
-all**. The agent still has 2 USDC sitting in the firewall that it can no
-longer touch, because the owner revoked it.
+The three `SpendAuthorized` events for this agent total exactly 3 USDC, the
+three allowed payments and nothing else. Merchant B, the target of the blocked
+payment, received **nothing at all** and its balance is still zero. The agent
+still has 2 USDC sitting in the firewall that it can no longer touch, because
+the owner revoked it.
+
+Merchant A's own balance is higher than 3 USDC, because it is a fixed address
+reused by every demo run and holds the total of all of them. The per-agent
+event total above is the figure that isolates this run.
 
 ### The audit trail, queried from the contract
 
 ```
-events on the firewall since deployment:
-  OwnershipTransferred 1
-  AgentRegistered      1
-  MerchantAllowlisted  1
-  Deposited            1
-  SpendAuthorized      3
-  AgentRevoked         1
+events for this agent, since setup:
 
-  OwnershipTransferred block 55416501
-  AgentRegistered      block 55416646
-  MerchantAllowlisted  block 55416651
-  Deposited            block 55416668
-  SpendAuthorized      block 55416769  1 USDC -> 0x2f572D8771Af409Fce73970898974F7d94787386
-  SpendAuthorized      block 55416792  1 USDC -> 0x2f572D8771Af409Fce73970898974F7d94787386
-  SpendAuthorized      block 55416801  1 USDC -> 0x2f572D8771Af409Fce73970898974F7d94787386
-  AgentRevoked         block 55416824
+  55565623  AgentRegistered      0xca013179ef12be32df1f023b82fdc9b0a0dfad124ec06b6c2133902b5ef8705e
+  55565633  MerchantAllowlisted  0xad7ed481a256eb00e2a801a84bc5086536c8ed3f9742a2d98f8540d289ca0989
+  55565679  Deposited            0xbf0c16b45d8df9c0fefe141394ef67cb82e1709b9e57a1c132a3f4d4092adc21   5 USDC
+  55566085  SpendAuthorized      0x533815a695c4c1e32a2603f27ddd5ca924c9d7618b5cc8b0d2dfae50ff5ae078   1 USDC -> 0x2f572D8771Af409Fce73970898974F7d94787386
+  55566242  SpendAuthorized      0xc249279195f82cfb1cfb72fd6c5569c8d041dd458ce39d0756545d28c7f9b1ea   1 USDC -> 0x2f572D8771Af409Fce73970898974F7d94787386
+  55566280  SpendAuthorized      0x4d48341fba73452c11acab49e8235de1d278c104cc978d3bd81837df1420b045   1 USDC -> 0x2f572D8771Af409Fce73970898974F7d94787386
+  55566353  AgentRevoked         0xf8df9eddd4f2d992a1e8be292dd41a2b2737ffa9bc22b20f7cc20d01a11a8fe1
 ```
 
 Three spends authorised, matching the three payments that passed. The four
 blocked payments emitted nothing, because they never happened.
 
 ## Full console output, verbatim
+
+Colour escape codes stripped, otherwise unedited.
 
 ```
 
@@ -160,7 +177,7 @@ blocked payments emitted nothing, because they never happened.
 ====================================================================
   network    arcTestnet  (chainId 5042002)
   firewall   0x28412A523b9e1D13b1D108bF39Ab3A49035cd248
-  agent      0xa2429471b76c16135ceeb05b89e86dd2ccf7bcd1
+  agent      0x0ffbcf5360e32ef47217f2437e6b4f649017aba4
   wallet     Circle developer-controlled wallet
 
   policy     3 USDC per 3600s period
@@ -177,7 +194,7 @@ blocked payments emitted nothing, because they never happened.
   amount     1 USDC
   dry run    ALLOWED  checkSpend says yes  (code 0)
   submit     spend() via Circle developer-controlled wallet
-  result     PASSED   tx 0x794252e48bf66431626e5e103cb1a4fb7d9cb0e290dc430d9c06d92fff8889d9
+  result     PASSED   tx 0x533815a695c4c1e32a2603f27ddd5ca924c9d7618b5cc8b0d2dfae50ff5ae078
   budget     1 / 3 USDC used, 2 left this period
 
 --------------------------------------------------------------------
@@ -213,7 +230,7 @@ blocked payments emitted nothing, because they never happened.
   amount     1 USDC
   dry run    ALLOWED  checkSpend says yes  (code 0)
   submit     spend() via Circle developer-controlled wallet
-  result     PASSED   tx 0x79dd03b717d38c373001ebcb60843461d27f5133602ea8c854b10c39bf6e3e1b
+  result     PASSED   tx 0xc249279195f82cfb1cfb72fd6c5569c8d041dd458ce39d0756545d28c7f9b1ea
   budget     2 / 3 USDC used, 1 left this period
 
 --------------------------------------------------------------------
@@ -223,7 +240,7 @@ blocked payments emitted nothing, because they never happened.
   amount     1 USDC
   dry run    ALLOWED  checkSpend says yes  (code 0)
   submit     spend() via Circle developer-controlled wallet
-  result     PASSED   tx 0xcc11bb0abe37fc19d8c525300ec7ef4592c9cab3487d9c115d474c8ecf6bfec9
+  result     PASSED   tx 0x4d48341fba73452c11acab49e8235de1d278c104cc978d3bd81837df1420b045
   budget     3 / 3 USDC used, 0 left this period
 
 --------------------------------------------------------------------
@@ -242,8 +259,8 @@ blocked payments emitted nothing, because they never happened.
 ====================================================================
 
   owner      0x684C426DD7c2652592cF85116702D50f3e326a95  (PRIVATE_KEY)
-  action     revokeAgent(0xa2429471b76c16135ceeb05b89e86dd2ccf7bcd1)
-  tx         0xe023817f9efc415b2577ab8816f2575d81a3733f7473243eb91e0b20b58e58a4
+  action     revokeAgent(0x0ffbcf5360e32ef47217f2437e6b4f649017aba4)
+  tx         0xf8df9eddd4f2d992a1e8be292dd41a2b2737ffa9bc22b20f7cc20d01a11a8fe1
   Revocation is one transaction and takes effect immediately.
 
 --------------------------------------------------------------------
@@ -285,12 +302,13 @@ blocked payments emitted nothing, because they never happened.
    PASS   PRIVATE_KEY               0x684C426DD7c2652592cF85116702D50f3e326a95
    PASS   CIRCLE_API_KEY            set
    PASS   CIRCLE_ENTITY_SECRET      set
-   PASS   agent wallet              0xa2429471b76c16135ceeb05b89e86dd2ccf7bcd1
+   PASS   agent wallet              0x0ffbcf5360e32ef47217f2437e6b4f649017aba4
    PASS   deployment record         deployments/arcTestnet.json
    PASS   rpc                       https://rpc.testnet.arc.network  chainId 5042002
    PASS   contract deployed         0x28412A523b9e1D13b1D108bF39Ab3A49035cd248
    PASS   owner key                 0x684C426DD7c2652592cF85116702D50f3e326a95  (PRIVATE_KEY)
-   PASS   owner gas                 9.4179637873 USDC (gas)
+   PASS   owner gas                 18.4048926063 USDC (gas)
+   PASS   agent matches record      env and deployment record agree
    PASS   agent gas                 0.5 USDC (gas)
    PASS   agent registered          3 USDC per 3600s, max 1 per tx
    PASS   agent deposit             5 USDC in the firewall
@@ -299,16 +317,25 @@ blocked payments emitted nothing, because they never happened.
   Ready. All checks passed.
 ```
 
+`agent matches record` was added after an earlier run failed: preflight used to
+print the agent from `.env` while checking the one in the deployment record, so
+a freshly provisioned wallet that had never been registered still passed every
+check against the previous agent. The run then died at `revokeAgent` with
+`AgentNotRegistered`. Preflight now checks the wallet the demo actually signs
+as, and fails when the two disagree.
+
 ## The live dashboard shows a different agent
 
-This run ends with agent A revoked, which is the point of it: the kill switch
+This run ends with its agent revoked, which is the point of it: the kill switch
 works and is permanent. A revoked agent makes for a dead dashboard, though,
 where every panel reads "revoked" and nothing can be explored.
 
-So the public dashboard is pointed at **agent B**, a second agent registered
-under the identical policy against the same contract, allowlisted to the same
-merchant, funded, and deliberately left active. It is labelled as such in the
-UI. Agent A's revocation lives here, in this document, and in the video.
+So the public dashboard is pointed at **agent B**,
+[`0xC2540BD8052aaD62a600994f376CaDEC524e9c2C`](https://testnet.arcscan.app/address/0xC2540BD8052aaD62a600994f376CaDEC524e9c2C),
+a second agent registered under the identical policy against the same contract,
+allowlisted to the same merchant, funded, and deliberately left active. It is
+labelled as such in the UI. This run's revocation lives here, in this document,
+and in the video.
 
 Both agents are on the same SpendFirewall contract, so the dashboard's
 contract address matches every transaction linked above.
@@ -343,7 +370,7 @@ policy amount here is the 6 decimal view. The two differ by a factor of
 npm install
 npx hardhat compile
 
-npm run deploy:arc      # deploy the firewall
+npm run deploy:arc      # deploy the firewall, or reuse an existing one
 npm run provision       # create the Circle agent wallet
 npm run fund:agent      # send it gas, since a new wallet is empty
 npm run setup:arc       # register the agent, allowlist, deposit
@@ -352,7 +379,11 @@ npm run demo:arc        # the run above
 ```
 
 Requires a Circle API key, a registered Circle entity secret, and a funded Arc
-testnet key. Testnet USDC comes from https://faucet.circle.com.
+testnet key. Testnet USDC comes from https://faucet.circle.com. The owner needs
+about 5.5 USDC on hand per run: 5 to deposit and 0.5 to fund the agent's gas.
+
+Each recorded run ends with its agent revoked and cannot be repeated with the
+same wallet. Provision a fresh one for the next run.
 
 The same sequence runs offline against a local hardhat node with
 `npm run demo`, which uses a local signer instead of Circle.

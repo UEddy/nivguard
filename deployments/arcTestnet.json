@@ -9,7 +9,7 @@
   "deployTx": "0xada74c3a640ea9112da7a1e426fd78b052ae3df8fb8146cf75f53440c7cd643d",
   "timestamp": "2026-08-05T09:13:39.036Z",
   "agent": "0xc2540bd8052aad62a600994f376cadec524e9c2c",
-  "demoAgent": "0xa2429471b76C16135CEeb05b89e86dD2ccF7BCd1",
+  "demoAgent": "0x0ffbcf5360e32Ef47217f2437e6B4f649017abA4",
   "merchants": {
     "allowed": "0x2f572D8771Af409Fce73970898974F7d94787386",
     "blocked": "0x3994a61B70C84F18294316764ABFB73588C8763F"

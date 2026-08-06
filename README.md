@@ -27,7 +27,7 @@ decision is an indexed event onchain.
 
 ## Proof it works
 
-A recorded run on Arc public testnet, 5 August 2026. The agent attempted seven
+A recorded run on Arc public testnet, 6 August 2026. The agent attempted seven
 payments. The contract allowed three and rejected four, each for a specific
 reason. Nothing was scripted to fail: the agent submitted every payment for
 real and the chain decided.
@@ -37,17 +37,17 @@ allowlisted and one deliberately not.
 
 | # | Attempted | Outcome | Reason | Transaction |
 | --- | --- | --- | --- | --- |
-| 1 | 1 USDC to the allowlisted merchant | **allowed** | code 0, inside every limit | [`0x794252e4...fff8889d9`](https://testnet.arcscan.app/tx/0x794252e48bf66431626e5e103cb1a4fb7d9cb0e290dc430d9c06d92fff8889d9) |
+| 1 | 1 USDC to the allowlisted merchant | **allowed** | code 0, inside every limit | [`0x533815a6...0ff5ae078`](https://testnet.arcscan.app/tx/0x533815a695c4c1e32a2603f27ddd5ca924c9d7618b5cc8b0d2dfae50ff5ae078) |
 | 2 | 1 USDC to a merchant it found on its own | **blocked** | code 3, `MERCHANT_NOT_ALLOWED` | none, never broadcast |
 | 3 | 2 USDC to the allowlisted merchant | **blocked** | code 4, `OVER_MAX_PER_TX` | none, never broadcast |
-| 4.1 | 1 USDC to the allowlisted merchant | **allowed** | code 0, inside every limit | [`0x79dd03b7...9bf6e3e1b`](https://testnet.arcscan.app/tx/0x79dd03b717d38c373001ebcb60843461d27f5133602ea8c854b10c39bf6e3e1b) |
-| 4.2 | 1 USDC to the allowlisted merchant | **allowed** | code 0, budget now exhausted | [`0xcc11bb0a...ecf6bfec9`](https://testnet.arcscan.app/tx/0xcc11bb0abe37fc19d8c525300ec7ef4592c9cab3487d9c115d474c8ecf6bfec9) |
+| 4.1 | 1 USDC to the allowlisted merchant | **allowed** | code 0, inside every limit | [`0xc2492791...8c7f9b1ea`](https://testnet.arcscan.app/tx/0xc249279195f82cfb1cfb72fd6c5569c8d041dd458ce39d0756545d28c7f9b1ea) |
+| 4.2 | 1 USDC to the allowlisted merchant | **allowed** | code 0, budget now exhausted | [`0x4d48341f...f1420b045`](https://testnet.arcscan.app/tx/0x4d48341fba73452c11acab49e8235de1d278c104cc978d3bd81837df1420b045) |
 | 4.3 | 1 USDC to the allowlisted merchant | **blocked** | code 5, `OVER_PERIOD_BUDGET` | none, never broadcast |
 | 5 | 0.5 USDC after the owner revoked the agent | **blocked** | code 2, `REVOKED` | none, never broadcast |
 
 Three allowed, four blocked, out of seven attempts. The owner's kill switch
 between 4.3 and 5 is
-[`0xe023817f...b58e58a4`](https://testnet.arcscan.app/tx/0xe023817f9efc415b2577ab8816f2575d81a3733f7473243eb91e0b20b58e58a4).
+[`0xf8df9edd...1a11a8fe1`](https://testnet.arcscan.app/tx/0xf8df9eddd4f2d992a1e8be292dd41a2b2737ffa9bc22b20f7cc20d01a11a8fe1).
 
 **The blocked payments never reached the chain.** They have no transaction hash
 because there is no transaction to link. The agent submitted each one through
@@ -58,7 +58,7 @@ estimation is the firewall working.
 Two facts on the chain confirm it, and both are permanent:
 
 - The demo agent
-  [`0xa2429471...ccF7BCd1`](https://testnet.arcscan.app/address/0xa2429471b76C16135CEeb05b89e86dD2ccF7BCd1)
+  [`0x0ffbcf53...9017abA4`](https://testnet.arcscan.app/address/0x0ffbcf5360e32Ef47217f2437e6B4f649017abA4)
   has a nonce of 3. Three outgoing transactions in its entire existence, matching
   the three allowed payments exactly.
 - The non-allowlisted merchant
@@ -165,7 +165,7 @@ Arc testnet, chain ID `5042002`, explorer https://testnet.arcscan.app
 | What | Address |
 | --- | --- |
 | SpendFirewall, verified source | [`0x28412A523b9e1D13b1D108bF39Ab3A49035cd248`](https://testnet.arcscan.app/address/0x28412A523b9e1D13b1D108bF39Ab3A49035cd248?tab=contract) |
-| Agent A, Circle custody, revoked in the recorded run | [`0xa2429471b76C16135CEeb05b89e86dD2ccF7BCd1`](https://testnet.arcscan.app/address/0xa2429471b76C16135CEeb05b89e86dD2ccF7BCd1) |
+| Agent, Circle custody, revoked in the recorded run | [`0x0ffbcf5360e32Ef47217f2437e6B4f649017abA4`](https://testnet.arcscan.app/address/0x0ffbcf5360e32Ef47217f2437e6B4f649017abA4) |
 | Agent B, Circle custody, live on the dashboard | [`0xC2540BD8052aaD62a600994f376CaDEC524e9c2C`](https://testnet.arcscan.app/address/0xC2540BD8052aaD62a600994f376CaDEC524e9c2C) |
 | Merchant, allowlisted | [`0x2f572D8771Af409Fce73970898974F7d94787386`](https://testnet.arcscan.app/address/0x2f572D8771Af409Fce73970898974F7d94787386) |
 | Merchant, not allowlisted | [`0x3994a61B70C84F18294316764ABFB73588C8763F`](https://testnet.arcscan.app/address/0x3994a61B70C84F18294316764ABFB73588C8763F) |
