@@ -12,6 +12,7 @@
     "setup:local": "node agent/setupLocal.js",
     "demo": "node agent/demo.js",
     "demo:arc": "node agent/demo.js --network arcTestnet",
+    "demo:replay": "node scripts/replayDemo.js",
     "provision": "node agent/provision.js",
     "setup:arc": "node scripts/setupArc.js",
     "fund:agent": "node scripts/fundAgent.js",

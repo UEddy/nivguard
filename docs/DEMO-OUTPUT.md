@@ -166,6 +166,17 @@ blocked payments emitted nothing, because they never happened.
 
 Colour escape codes stripped, otherwise unedited.
 
+To replay this to a terminal for a screen recording, exactly as `demo:arc`
+printed it and without touching the network:
+
+```bash
+npm run demo:replay
+```
+
+That command reads the block below rather than storing its own copy, so the
+two can never disagree. It prints one extra line at the top identifying itself
+as a recording, and re-applies the colour that was stripped here.
+
 ```
 
 > nivguard@1.0.0 demo:arc
