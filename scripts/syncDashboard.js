@@ -22,14 +22,26 @@ const RECORD = path.join(__dirname, "..", "deployments", "arcTestnet.json");
 // header on POST responses, so a browser blocks it. Blockscout sends "*".
 const BROWSER_RPC = "https://testnet.arcscan.app/api/eth-rpc";
 
-async function deployBlockOf(record) {
-  if (!record.deployTx) return 0;
+// Blockscout REST, the activity feed's fallback when eth_getLogs fails.
+const BROWSER_REST = "https://testnet.arcscan.app/api/v2";
+
+/// The block the firewall was deployed in, used as fromBlock for the activity
+/// feed. Falling back to 0 would make the dashboard scan the whole chain for a
+/// contract that cannot have emitted anything before it existed, so on a failed
+/// lookup keep whatever the dashboard already has rather than overwriting a
+/// good value with a bad one.
+async function deployBlockOf(record, current) {
+  if (!record.deployTx) return current;
   try {
     const provider = makeProvider(ARC_TESTNET);
     const receipt = await provider.getTransactionReceipt(record.deployTx);
-    return receipt ? receipt.blockNumber : 0;
-  } catch {
-    return 0;
+    if (receipt) return receipt.blockNumber;
+    console.warn("  warning: no receipt for the deploy tx, keeping deployBlock " + current);
+    return current;
+  } catch (err) {
+    console.warn("  warning: could not look up the deploy block (" + err.message +
+      "), keeping deployBlock " + current);
+    return current;
   }
 }
 
@@ -49,7 +61,9 @@ async function main() {
     );
   }
 
-  const deployBlock = await deployBlockOf(record);
+  const html0 = fs.readFileSync(HTML, "utf8");
+  const prev = html0.match(/deployBlock:\s*(\d+)/);
+  const deployBlock = await deployBlockOf(record, prev ? Number(prev[1]) : 0);
 
   const block = `const CONFIG = {
   // Blockscout's JSON-RPC. Used rather than https://rpc.testnet.arc.network
@@ -57,6 +71,9 @@ async function main() {
   // POST responses, so a browser blocks it. This one sends "*" and serves
   // eth_call and eth_getLogs over the full history without a range cap.
   rpcUrl: ${JSON.stringify(BROWSER_RPC)},
+  // Blockscout's REST API, used as the fallback for the activity feed when
+  // eth_getLogs fails. Different code path, same data.
+  restUrl: ${JSON.stringify(BROWSER_REST)},
   chainId: ${record.chainId},
   explorer: ${JSON.stringify(ARC_TESTNET.explorer)},
   spendFirewall: ${JSON.stringify(ethers.getAddress(record.spendFirewall))},
@@ -73,7 +90,7 @@ async function main() {
   }
 };`;
 
-  const html = fs.readFileSync(HTML, "utf8");
+  const html = html0;
   const re = /const CONFIG = \{[\s\S]*?\n\};/;
 
   if (!re.test(html)) {

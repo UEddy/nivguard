@@ -196,6 +196,21 @@
   }
   .err.show { display: block; }
 
+  /* Per panel error. A failing endpoint should cost you one panel, not the
+     page, so each panel carries its own slot and says what specifically
+     could not be read. The banner above is reserved for a failure that
+     genuinely affects everything, such as the provider not constructing. */
+  .panel-err {
+    border-left: 2px solid var(--bad); background: rgba(239,68,68,.07);
+    color: var(--bad); padding: 8px 10px; margin-bottom: 10px;
+    font-size: 12px; display: none; white-space: pre-wrap;
+  }
+  .panel-err.show { display: block; }
+  .stale {
+    color: var(--dim); font-size: 11px; margin-top: 8px; display: none;
+  }
+  .stale.show { display: block; }
+
   /* Which agent is on screen. The recorded demo ends with its agent revoked,
      so the dashboard deliberately shows a different, live one. Say so plainly
      rather than leaving a judge to work out why the addresses differ. */
@@ -254,6 +269,7 @@
     <section class="panel col-5" id="agentPanel">
       <div class="panel-h"><span class="n">01</span> Agent and policy</div>
       <div class="panel-b">
+        <div class="panel-err" id="policyErr"></div>
         <dl class="kv">
           <dt>agent</dt>
           <dd class="addr">
@@ -318,8 +334,9 @@
     <!-- ============ merchants ============ -->
     <section class="panel col-5">
       <div class="panel-h"><span class="n">03</span> Merchant allowlist</div>
-      <div class="panel-b" id="merchants">
-        <div class="skel">loading</div>
+      <div class="panel-b">
+        <div class="panel-err" id="merchantsErr"></div>
+        <div id="merchants"><div class="skel">loading</div></div>
       </div>
     </section>
 
@@ -329,6 +346,7 @@
         <span class="n">04</span> Activity
         <span class="dim" style="text-transform:none;letter-spacing:0">SpendAuthorized events, the onchain audit trail</span>
       </div>
+      <div class="panel-err" id="feedErr" style="margin:12px 14px 0"></div>
       <div id="feedWrap">
         <div class="empty skel">loading</div>
       </div>
@@ -358,6 +376,9 @@ const CONFIG = {
   // POST responses, so a browser blocks it. This one sends "*" and serves
   // eth_call and eth_getLogs over the full history without a range cap.
   rpcUrl: "https://testnet.arcscan.app/api/eth-rpc",
+  // Blockscout's REST API, used as the fallback for the activity feed when
+  // eth_getLogs fails. Different code path, same data.
+  restUrl: "https://testnet.arcscan.app/api/v2",
   chainId: 5042002,
   explorer: "https://testnet.arcscan.app",
   spendFirewall: "0x28412A523b9e1D13b1D108bF39Ab3A49035cd248",
@@ -376,6 +397,20 @@ const CONFIG = {
 
 const USDC_DECIMALS = 6;
 const REFRESH_MS = 15000;
+
+// Blockscout's JSON-RPC rejects any batch of more than 5 requests with HTTP
+// 413, and it counts requests rather than bytes: a 6 request batch of 361
+// bytes is refused where a 5 request batch of 301 bytes succeeds. ethers
+// batches concurrent calls with a default batchMaxCount of 100, so any tick
+// that issued 6 or more calls took out the whole page with
+// "server response 413 Payload Too Large". Capping the batch here makes
+// ethers split large bursts into several conforming requests instead.
+const RPC_BATCH_MAX = 5;
+
+// How many blocks per eth_getLogs window. The endpoint currently serves the
+// full history in one call, but a range cap is the usual reason a log query
+// starts failing, so the feed asks in bounded windows and merges the results.
+const LOG_WINDOW = 50000;
 
 // Mirrors the reason codes in SpendFirewall.sol.
 const REASONS = {
@@ -433,7 +468,10 @@ let provider, contract;
 
 async function init() {
   const net = new ethers.Network("arcTestnet", CONFIG.chainId);
-  provider = new ethers.JsonRpcProvider(CONFIG.rpcUrl, net, { staticNetwork: net });
+  provider = new ethers.JsonRpcProvider(CONFIG.rpcUrl, net, {
+    staticNetwork: net,
+    batchMaxCount: RPC_BATCH_MAX
+  });
   contract = new ethers.Contract(CONFIG.spendFirewall, ABI, provider);
 
   $("fwAddr").textContent = short(CONFIG.spendFirewall);
@@ -464,8 +502,12 @@ async function init() {
   $("merchant").addEventListener("keydown", (e) => { if (e.key === "Enter") runCheck(); });
   $("amount").addEventListener("keydown", (e) => { if (e.key === "Enter") runCheck(); });
 
-  await refresh();
+  // The simulator only needs the contract and an eth_call, so enable it before
+  // the first refresh rather than after. It stays usable even if every other
+  // panel is failing, which is exactly when someone wants to try it.
   $("simBtn").disabled = false;
+
+  await refresh();
 
   setInterval(refresh, REFRESH_MS);
 }
@@ -493,21 +535,64 @@ function buildPresets() {
   }
 }
 
-async function refresh() {
-  try {
-    const [block, p] = await Promise.all([
-      provider.getBlockNumber(),
-      contract.getPolicy(CONFIG.agent)
-    ]);
+/// Show or clear a panel's own error slot.
+function panelError(id, msg) {
+  const el = $(id);
+  if (!el) return;
+  if (msg) {
+    el.textContent = msg;
+    el.classList.add("show");
+  } else {
+    el.textContent = "";
+    el.classList.remove("show");
+  }
+}
 
+const reason = (e) => e && (e.shortMessage || e.message) || "unknown error";
+
+/// Each panel refreshes independently and owns its failure. A dead activity
+/// feed must not blank the policy panel or disable the simulator, so nothing
+/// here is allowed to reject: every section is settled separately and reports
+/// into its own slot.
+let refreshing = false;
+
+async function refresh() {
+  // The interval keeps firing whether or not the previous pass finished. Two
+  // overlapping passes double the in flight calls, which is one of the ways
+  // a burst crosses the endpoint's batch limit, so skip rather than stack.
+  if (refreshing) return;
+  refreshing = true;
+
+  try {
+    await Promise.allSettled([
+      refreshHead(),
+      refreshPolicy(),
+      renderMerchants(),
+      renderFeed()
+    ]);
+  } finally {
+    refreshing = false;
+  }
+}
+
+async function refreshHead() {
+  try {
+    const block = await provider.getBlockNumber();
     $("blockchip").textContent = "block " + block.toLocaleString();
     $("netchip").textContent = "arc testnet " + CONFIG.chainId;
+  } catch {
+    $("blockchip").textContent = "block unavailable";
+  }
+}
 
+async function refreshPolicy() {
+  try {
+    const p = await contract.getPolicy(CONFIG.agent);
     renderPolicy(p);
-    await renderMerchants();
-    await renderFeed();
+    panelError("policyErr", "");
   } catch (e) {
-    showError("Could not read the chain.\n" + (e.shortMessage || e.message));
+    panelError("policyErr", "Could not read the policy from the chain: " + reason(e) +
+      "\nThe values below may be out of date. Retrying every 15 seconds.");
   }
 }
 
@@ -556,9 +641,17 @@ async function renderMerchants() {
 
   // Do not trust the labels in CONFIG. Ask the contract what is actually
   // allowlisted, so this panel can never disagree with the chain.
-  const states = await Promise.all(
-    entries.map(([, addr]) => contract.isMerchantAllowed(CONFIG.agent, addr))
-  );
+  let states;
+  try {
+    states = await Promise.all(
+      entries.map(([, addr]) => contract.isMerchantAllowed(CONFIG.agent, addr))
+    );
+    panelError("merchantsErr", "");
+  } catch (e) {
+    panelError("merchantsErr", "Could not read the allowlist from the chain: " + reason(e) +
+      "\nRetrying every 15 seconds.");
+    return;
+  }
 
   const box = $("merchants");
   box.innerHTML = "";
@@ -579,19 +672,104 @@ async function renderMerchants() {
   box.appendChild(note);
 }
 
+/// Read SpendAuthorized over the whole history in bounded windows.
+///
+/// fromBlock is the contract's deployment block, written into CONFIG by
+/// scripts/syncDashboard.js from deployments/arcTestnet.json. Starting at 0
+/// would ask the node to scan the entire chain for a contract that cannot
+/// have emitted anything before it existed.
+async function fetchLogsRpc() {
+  const latest = await provider.getBlockNumber();
+  const filter = contract.filters.SpendAuthorized(CONFIG.agent);
+
+  // Guard against a CONFIG that was never synced. Scanning from 0 is slow
+  // and pointless, but it is still better than showing nothing.
+  const start = CONFIG.deployBlock > 0 ? CONFIG.deployBlock : 0;
+
+  let out;
+  try {
+    // The endpoint currently serves the whole range in one call, and that is
+    // one request rather than many. Arc adds well over a hundred thousand
+    // blocks a day, so a fixed window would mean an ever growing number of
+    // sequential requests on every refresh for no benefit.
+    out = await contract.queryFilter(filter, start, latest);
+  } catch (wide) {
+    // Too wide, or the endpoint grew a range cap. Ask in bounded windows and
+    // merge. This is slower, so it is the escalation and not the default.
+    out = [];
+    for (let from = start; from <= latest; from += LOG_WINDOW) {
+      const to = Math.min(from + LOG_WINDOW - 1, latest);
+      out.push(...await contract.queryFilter(filter, from, to));
+    }
+  }
+
+  return out.map((l) => ({
+    merchant: l.args.merchant,
+    amount: l.args.amount,
+    hash: l.transactionHash,
+    blockNumber: l.blockNumber,
+    timestamp: null
+  }));
+}
+
+/// Fallback: Blockscout's REST API. A different code path to the same events,
+/// so a JSON-RPC problem does not take the feed down with it. It also returns
+/// block_timestamp inline, which saves the per block lookups the RPC path
+/// needs.
+async function fetchLogsRest() {
+  const url = CONFIG.restUrl + "/addresses/" + CONFIG.spendFirewall + "/logs";
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("REST API returned " + res.status);
+
+  const body = await res.json();
+  const items = Array.isArray(body.items) ? body.items : [];
+
+  const topic0 = ethers.id("SpendAuthorized(address,address,uint256,uint256,uint256)");
+  const agentTopic = ethers.zeroPadValue(ethers.getAddress(CONFIG.agent), 32).toLowerCase();
+
+  return items
+    .filter((it) => {
+      const t = it.topics || [];
+      return t[0] && t[0].toLowerCase() === topic0.toLowerCase() &&
+             t[1] && t[1].toLowerCase() === agentTopic;
+    })
+    .map((it) => {
+      // data is (amount, periodSpent, remainingInPeriod); amount is first.
+      const amount = BigInt("0x" + it.data.slice(2, 66));
+      const ts = it.block_timestamp ? Math.floor(new Date(it.block_timestamp).getTime() / 1000) : null;
+      return {
+        merchant: ethers.getAddress("0x" + it.topics[2].slice(26)),
+        amount,
+        hash: it.transaction_hash,
+        blockNumber: it.block_number,
+        timestamp: ts
+      };
+    });
+}
+
 async function renderFeed() {
   const wrap = $("feedWrap");
   let logs;
+  let degraded = false;
 
   try {
-    logs = await contract.queryFilter(
-      contract.filters.SpendAuthorized(CONFIG.agent),
-      CONFIG.deployBlock,
-      "latest"
-    );
-  } catch (e) {
-    wrap.innerHTML = '<div class="empty">Could not load events: ' + (e.shortMessage || e.message) + '</div>';
-    return;
+    logs = await fetchLogsRpc();
+    panelError("feedErr", "");
+  } catch (rpcErr) {
+    // Degrade rather than take the panel down.
+    try {
+      logs = await fetchLogsRest();
+      degraded = true;
+      panelError("feedErr",
+        "Live event query failed (" + reason(rpcErr) + "). " +
+        "Showing the same events from the Blockscout REST API instead.");
+    } catch (restErr) {
+      wrap.innerHTML = '<div class="empty">Could not load the activity feed.<br>' +
+        'JSON-RPC: ' + reason(rpcErr) + '<br>REST: ' + reason(restErr) +
+        '<br>The policy panel and the simulator above are unaffected.</div>';
+      panelError("feedErr", "");
+      return;
+    }
   }
 
   if (!logs.length) {
@@ -599,29 +777,33 @@ async function renderFeed() {
     return;
   }
 
-  // Newest first, and fetch timestamps for the blocks involved.
-  logs = logs.slice().reverse();
-  const blocks = [...new Set(logs.map((l) => l.blockNumber))];
+  // Newest first.
+  logs = logs.slice().sort((a, b) => b.blockNumber - a.blockNumber);
+
+  // Fill in timestamps the RPC path did not carry. Bounded, deduplicated, and
+  // individually caught: a missing timestamp costs one cell, not the panel.
+  const need = [...new Set(logs.filter((l) => l.timestamp === null).map((l) => l.blockNumber))];
   const times = {};
-  await Promise.all(blocks.map(async (b) => {
+  await Promise.all(need.map(async (b) => {
     try { times[b] = (await provider.getBlock(b)).timestamp; } catch { times[b] = null; }
   }));
 
   const rows = logs.map((l) => {
-    const t = times[l.blockNumber];
+    const t = l.timestamp !== null ? l.timestamp : times[l.blockNumber];
     const when = t ? ago(t) : "block " + l.blockNumber;
     const stamp = t ? new Date(Number(t) * 1000).toISOString().replace("T", " ").slice(0, 19) + " UTC" : "";
     return '<tr>' +
       '<td class="nowrap" title="' + stamp + '">' + when + '</td>' +
-      '<td><a href="' + addrUrl(l.args.merchant) + '" target="_blank" rel="noopener">' + short(l.args.merchant) + '</a></td>' +
-      '<td class="amt">' + usdc(l.args.amount) + ' USDC</td>' +
-      '<td class="nowrap"><a href="' + txUrl(l.transactionHash) + '" target="_blank" rel="noopener">' + short(l.transactionHash) + '</a></td>' +
+      '<td><a href="' + addrUrl(l.merchant) + '" target="_blank" rel="noopener">' + short(l.merchant) + '</a></td>' +
+      '<td class="amt">' + usdc(l.amount) + ' USDC</td>' +
+      '<td class="nowrap"><a href="' + txUrl(l.hash) + '" target="_blank" rel="noopener">' + short(l.hash) + '</a></td>' +
       '</tr>';
   }).join("");
 
   wrap.innerHTML =
     '<table><thead><tr><th>When</th><th>Merchant</th><th>Amount</th><th>Transaction</th></tr></thead>' +
-    '<tbody>' + rows + '</tbody></table>';
+    '<tbody>' + rows + '</tbody></table>' +
+    (degraded ? '<div class="stale show">Served from the REST fallback.</div>' : '');
 }
 
 async function runCheck() {
