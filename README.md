@@ -53,7 +53,7 @@ between 4.3 and 5 is
 because there is no transaction to link. The agent submitted each one through
 its Circle wallet, and Circle's gas estimation hit the contract's revert and
 refused to broadcast. The revert is the whole mechanism, so being stopped at
-estimation is the firewall working, not the agent failing to try.
+estimation is the firewall working.
 
 Two facts on the chain confirm it, and both are permanent:
 
