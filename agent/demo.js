@@ -16,8 +16,9 @@
 
 const { ethers } = require("ethers");
 
-const { fmt, describeReason } = require("./config");
+const { fmt, describeReason, loadArtifact } = require("./config");
 const { createContext, runJob, readPolicy } = require("./runner");
+const { formatFailure } = require("./revert");
 const { getOwnerSigner } = require("./wallet");
 const { DEMO, assertCoherent } = require("./demoConfig");
 const log = require("./log");
@@ -159,8 +160,15 @@ async function main() {
     expectedOwner: deployment.owner,
   });
 
-  const revokeTx = await firewall.connect(owner).revokeAgent(signer.address);
-  await revokeTx.wait();
+  // The owner's calls were the one path with no revert decoding, so a failure
+  // here printed a raw selector. Decode it like every payment already is.
+  let revokeTx;
+  try {
+    revokeTx = await firewall.connect(owner).revokeAgent(signer.address);
+    await revokeTx.wait();
+  } catch (err) {
+    throw asReadable(err, firewall.interface, `revokeAgent(${signer.address})`);
+  }
 
   log.blank();
   log.field("owner", `${deployment.owner}  ${log.c.grey(`(${owner.sourceLabel})`)}`);
@@ -207,9 +215,47 @@ function summarise(results) {
   log.blank();
 }
 
+/// Attach a decoded, human readable report to a reverted call so the top level
+/// handler can print it instead of a hex blob.
+function asReadable(err, iface, action) {
+  const { lines, hint } = formatFailure({ iface, err, action });
+  err.nivguard = { lines, hint };
+  return err;
+}
+
 main().catch((err) => {
   console.error("");
-  console.error(`Demo failed: ${err.message}`);
-  if (err.stack) console.error(err.stack.split("\n").slice(1, 4).join("\n"));
+  log.banner("Demo failed");
+
+  // A reverted contract call carries a decoded report. Anything else, such as
+  // a missing env var, is already a plain sentence.
+  let report = err.nivguard;
+  if (!report) {
+    try {
+      const iface = new ethers.Interface(loadArtifact("SpendFirewall").abi);
+      const f = formatFailure({ iface, err });
+      if (f.decoded) report = { lines: f.lines, hint: f.hint };
+    } catch {
+      // No artifact, so there is nothing to decode against.
+    }
+  }
+
+  if (report) {
+    for (const [k, v] of report.lines) log.field(k, v);
+    if (report.hint) {
+      log.blank();
+      for (const line of report.hint.split("\n")) log.note(line);
+    }
+  } else {
+    log.field("reason", err.shortMessage || err.message);
+  }
+
+  log.blank();
+  log.note("Run npm run preflight:arc to check every precondition.");
+  console.error("");
+
+  if (process.env.NIVGUARD_DEBUG && err.stack) {
+    console.error(err.stack.split("\n").slice(1, 6).join("\n"));
+  }
   process.exitCode = 1;
 });

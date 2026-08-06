@@ -78,6 +78,17 @@ const ERROR_TEXT = {
   ZeroAmount: () => "amount is zero",
   ZeroAddress: () => "a zero address was supplied",
   InvalidPolicy: () => "the policy is invalid",
+
+  // Owner-side errors. These never fire on spend(), which is why they were
+  // missing until an owner call reverted mid demo and printed raw hex.
+  AgentAlreadyRegistered: (a) => `agent ${a[0]} is already registered`,
+
+  // Inherited from OpenZeppelin Ownable and friends. Decoding these matters
+  // just as much: "not the owner" is a five second fix once you can read it.
+  OwnableUnauthorizedAccount: (a) => `${a[0]} is not the owner of this contract`,
+  OwnableInvalidOwner: (a) => `${a[0]} cannot be made owner`,
+  ReentrancyGuardReentrantCall: () => "reentrant call blocked",
+  SafeERC20FailedOperation: (a) => `the USDC token call failed at ${a[0]}`,
 };
 
 // 6 decimal formatting, used everywhere amounts are printed.

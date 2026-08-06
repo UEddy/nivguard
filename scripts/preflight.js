@@ -246,7 +246,25 @@ async function main() {
         isArc ? `fund ${ownerAddr} at https://faucet.circle.com` : "restart the hardhat node"
       );
 
-  const demoAgent = record.agent || agentAddress;
+  // The demo signs as AGENT_WALLET_ADDRESS from .env, so preflight has to
+  // check that same wallet. It used to prefer record.agent while printing the
+  // .env address above, so a freshly provisioned wallet that had never been
+  // registered still passed every check against the *previous* agent, and the
+  // run then died at revokeAgent with AgentNotRegistered. Prefer .env, and
+  // when the two disagree say so rather than silently picking one.
+  const demoAgent = agentAddress || record.agent;
+
+  if (agentAddress && record.agent &&
+      agentAddress.toLowerCase() !== record.agent.toLowerCase()) {
+    cl.fail(
+      "agent matches record",
+      `.env has ${agentAddress}, deployments/arcTestnet.json has ${record.agent}`,
+      "npm run setup:arc registers the .env wallet and rewrites the record"
+    );
+  } else if (agentAddress) {
+    cl.pass("agent matches record", "env and deployment record agree");
+  }
+
   if (demoAgent) {
     const agentGas = await provider.getBalance(demoAgent);
     agentGas >= DEMO.minimums.agentGas
