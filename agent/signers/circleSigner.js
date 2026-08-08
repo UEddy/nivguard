@@ -85,6 +85,33 @@ class CircleSigner {
     return this._await(transactionId);
   }
 
+  /// Ask Circle to execute fundGateway(agent, amount).
+  ///
+  /// Note the asymmetry this creates, and it is worth being clear about it:
+  /// Circle can sign this transaction, because it is an ordinary onchain call.
+  /// Circle cannot sign the nanopayments that follow, because those are
+  /// offchain EIP-3009 authorizations and the batching SDK takes a raw private
+  /// key with no custom signer hook. So the custody wallet opens the tap and a
+  /// separate hot key drinks from it. See agent/gateway.js.
+  async fundGateway(firewall, amount) {
+    const contractAddress = await firewall.getAddress();
+
+    const response = await this.client.createContractExecutionTransaction({
+      walletId: this.walletId,
+      contractAddress,
+      abiFunctionSignature: "fundGateway(address,uint256)",
+      abiParameters: [this.address, amount.toString()],
+      fee: { type: "level", config: { feeLevel: "MEDIUM" } },
+    });
+
+    const transactionId = response.data?.id;
+    if (!transactionId) {
+      throw new Error("Circle did not return a transaction id");
+    }
+
+    return this._await(transactionId);
+  }
+
   /// Poll until the transaction reaches a terminal state.
   /// Arc has sub second finality, so this settles quickly in practice.
   async _await(transactionId, { timeoutMs = 90_000, intervalMs = 1_500 } = {}) {

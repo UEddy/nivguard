@@ -1,0 +1,21 @@
+{
+  "network": "arcTestnet",
+  "chainId": 5042002,
+  "spendFirewall": "0xBB7c199A21763426F2B259042d7DD8F2Ccb59c1b",
+  "usdc": "0x3600000000000000000000000000000000000000",
+  "usdcIsMock": false,
+  "gatewayWallet": "0x0077777d7EBA4688BDeF3E311b846F25870A19B9",
+  "owner": "0x684C426DD7c2652592cF85116702D50f3e326a95",
+  "agent": "0x0A19cf8a11a3e43D7Ab88Dd528a796E31C5bb571",
+  "merchants": {
+    "allowed": "0x2f572D8771Af409Fce73970898974F7d94787386",
+    "blocked": "0x3994a61B70C84F18294316764ABFB73588C8763F"
+  },
+  "policy": {
+    "budgetPerPeriod": "500000",
+    "periodSeconds": 3600,
+    "maxPerTx": "200000"
+  },
+  "funding": "1000000",
+  "timestamp": "2026-08-08T11:26:04.065Z"
+}

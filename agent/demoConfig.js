@@ -62,6 +62,30 @@ const DEMO = {
     blocked: "0x3994a61B70C84F18294316764ABFB73588C8763F",
   },
 
+  // The nanopayments demo, run against Circle Gateway on Arc.
+  //
+  // Sized much smaller than the merchant demo, because the point here is the
+  // ratio rather than the amounts: one gated onchain top up funds thousands of
+  // ungated offchain payments. Two top ups fit the budget, the third does not.
+  nano: {
+    policy: {
+      // Two top ups of 0.2 fit. A third would need 0.6, so it is blocked.
+      budgetPerPeriod: USDC(0.5),
+      periodSeconds: 3600,
+      maxPerTx: USDC(0.2),
+    },
+    // What the owner puts behind the agent. Comfortably over the budget so
+    // the binding constraint is always policy, never funding.
+    funding: {
+      agentDeposit: USDC(1),
+    },
+    // One top up, repeated until the period budget refuses another.
+    topUp: USDC(0.2),
+    // Native USDC (18 decimal gas view) sent to the agent so it can pay gas
+    // for its own fundGateway calls. Nanopayments themselves cost no gas.
+    agentGas: GAS(0.02),
+  },
+
   // Minimum balances preflight insists on before letting the demo run.
   minimums: {
     // Native gas, 18 decimal view. Enough for a handful of transactions.
