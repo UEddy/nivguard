@@ -21,6 +21,7 @@ const REASON = {
   OVER_PERIOD_BUDGET: 5,
   INSUFFICIENT_BALANCE: 6,
   ZERO_AMOUNT: 7,
+  GATEWAY_NOT_CONFIGURED: 8,
 };
 
 // Default policy used across most tests.
@@ -946,6 +947,383 @@ describe("SpendFirewall", function () {
       await expect(
         firewall.connect(otherAgent).spend(merchant.address, usdc(100))
       ).to.not.be.reverted;
+    });
+  });
+
+  // -------------------------------------------------------------------
+  describe("fundGateway", function () {
+    // fundedFixture plus a mock GatewayWallet, wired in and allowlisted for
+    // the agent exactly as a real operator would have to do on Arc.
+    async function gatewayFixture() {
+      const ctx = await loadFixture(fundedFixture);
+      const { firewall, owner, agent } = ctx;
+
+      const MockGatewayWallet =
+        await ethers.getContractFactory("MockGatewayWallet");
+      const gateway = await MockGatewayWallet.deploy();
+      await gateway.waitForDeployment();
+      const gatewayAddress = await gateway.getAddress();
+
+      await firewall.connect(owner).setGatewayWallet(gatewayAddress);
+      await firewall
+        .connect(owner)
+        .setMerchantAllowed(agent.address, gatewayAddress, true);
+
+      return { ...ctx, gateway, gatewayAddress };
+    }
+
+    describe("setGatewayWallet", function () {
+      it("stores the address and emits GatewayWalletUpdated", async function () {
+        const { firewall, owner, gateway } = await loadFixture(gatewayFixture);
+        const addr = await gateway.getAddress();
+
+        expect(await firewall.gatewayWallet()).to.equal(addr);
+
+        await expect(firewall.connect(owner).setGatewayWallet(ethers.ZeroAddress))
+          .to.emit(firewall, "GatewayWalletUpdated")
+          .withArgs(addr, ethers.ZeroAddress);
+      });
+
+      it("rejects non owners", async function () {
+        const { firewall, stranger, gatewayAddress } =
+          await loadFixture(gatewayFixture);
+
+        await expect(
+          firewall.connect(stranger).setGatewayWallet(gatewayAddress)
+        ).to.be.revertedWithCustomError(firewall, "OwnableUnauthorizedAccount");
+      });
+
+      it("is off by default, and funding reverts rather than burning budget", async function () {
+        const { firewall, agent } = await loadFixture(fundedFixture);
+
+        expect(await firewall.gatewayWallet()).to.equal(ethers.ZeroAddress);
+
+        await expect(
+          firewall.connect(agent).fundGateway(agent.address, usdc(10))
+        ).to.be.revertedWithCustomError(firewall, "GatewayNotConfigured");
+
+        // Budget untouched by the failed attempt.
+        const p = await firewall.getPolicy(agent.address);
+        expect(p.periodSpent).to.equal(0);
+      });
+    });
+
+    describe("allowed path", function () {
+      it("moves USDC into the agent's gateway balance, not the firewall's", async function () {
+        const { firewall, token, agent, gateway, gatewayAddress } =
+          await loadFixture(gatewayFixture);
+
+        const amount = usdc(100);
+        await firewall.connect(agent).fundGateway(agent.address, amount);
+
+        // The tokens physically sit in the gateway contract.
+        expect(await token.balanceOf(gatewayAddress)).to.equal(amount);
+
+        // But the balance is credited to the agent, which is the whole point:
+        // the agent can sign nanopayment authorizations against it, and the
+        // firewall (which has no key) could not have.
+        const tokenAddress = await token.getAddress();
+        expect(
+          await gateway.availableBalance(tokenAddress, agent.address)
+        ).to.equal(amount);
+        expect(
+          await gateway.availableBalance(tokenAddress, await firewall.getAddress())
+        ).to.equal(0);
+      });
+
+      it("emits GatewayFunded, not SpendAuthorized", async function () {
+        const { firewall, agent, gatewayAddress } =
+          await loadFixture(gatewayFixture);
+
+        const amount = usdc(100);
+
+        await expect(firewall.connect(agent).fundGateway(agent.address, amount))
+          .to.emit(firewall, "GatewayFunded")
+          .withArgs(
+            agent.address,
+            gatewayAddress,
+            amount,
+            amount,
+            BUDGET - amount
+          );
+
+        await expect(
+          firewall.connect(agent).fundGateway(agent.address, amount)
+        ).to.not.emit(firewall, "SpendAuthorized");
+      });
+
+      it("debits the agent balance and totalDeposited", async function () {
+        const { firewall, agent } = await loadFixture(gatewayFixture);
+
+        const before = await firewall.balanceOfAgent(agent.address);
+        const totalBefore = await firewall.totalDeposited();
+
+        const amount = usdc(100);
+        await firewall.connect(agent).fundGateway(agent.address, amount);
+
+        expect(await firewall.balanceOfAgent(agent.address)).to.equal(
+          before - amount
+        );
+        expect(await firewall.totalDeposited()).to.equal(totalBefore - amount);
+      });
+
+      it("leaves no standing allowance to the gateway", async function () {
+        const { firewall, token, agent, gatewayAddress } =
+          await loadFixture(gatewayFixture);
+
+        await firewall.connect(agent).fundGateway(agent.address, usdc(100));
+
+        expect(
+          await token.allowance(await firewall.getAddress(), gatewayAddress)
+        ).to.equal(0);
+      });
+
+      it("lets the owner top up on the agent's behalf", async function () {
+        const { firewall, owner, agent, gateway, token } =
+          await loadFixture(gatewayFixture);
+
+        await firewall.connect(owner).fundGateway(agent.address, usdc(100));
+
+        expect(
+          await gateway.availableBalance(await token.getAddress(), agent.address)
+        ).to.equal(usdc(100));
+      });
+    });
+
+    describe("authorisation", function () {
+      it("stops a stranger burning another agent's budget", async function () {
+        const { firewall, agent, stranger } = await loadFixture(gatewayFixture);
+
+        await expect(
+          firewall.connect(stranger).fundGateway(agent.address, usdc(100))
+        )
+          .to.be.revertedWithCustomError(firewall, "NotAgentOrOwner")
+          .withArgs(stranger.address, agent.address);
+
+        const p = await firewall.getPolicy(agent.address);
+        expect(p.periodSpent).to.equal(0);
+      });
+    });
+
+    describe("block paths", function () {
+      it("blocks when the gateway is not allowlisted for the agent", async function () {
+        const { firewall, owner, agent, gatewayAddress } =
+          await loadFixture(gatewayFixture);
+
+        await firewall
+          .connect(owner)
+          .setMerchantAllowed(agent.address, gatewayAddress, false);
+
+        await expect(
+          firewall.connect(agent).fundGateway(agent.address, usdc(100))
+        )
+          .to.be.revertedWithCustomError(firewall, "MerchantNotAllowed")
+          .withArgs(agent.address, gatewayAddress);
+      });
+
+      it("blocks a top up over the per transaction cap", async function () {
+        const { firewall, agent } = await loadFixture(gatewayFixture);
+
+        await expect(
+          firewall.connect(agent).fundGateway(agent.address, MAX_PER_TX + 1n)
+        )
+          .to.be.revertedWithCustomError(firewall, "ExceedsMaxPerTx")
+          .withArgs(MAX_PER_TX + 1n, MAX_PER_TX);
+      });
+
+      it("blocks a top up over the period budget", async function () {
+        const { firewall, agent } = await loadFixture(gatewayFixture);
+
+        // BUDGET is 1000, MAX_PER_TX is 250. Four top ups exhaust it exactly.
+        for (let i = 0; i < 4; i++) {
+          await firewall.connect(agent).fundGateway(agent.address, MAX_PER_TX);
+        }
+
+        await expect(
+          firewall.connect(agent).fundGateway(agent.address, usdc(1))
+        )
+          .to.be.revertedWithCustomError(firewall, "ExceedsPeriodBudget")
+          .withArgs(usdc(1), 0);
+      });
+
+      it("blocks a revoked agent", async function () {
+        const { firewall, owner, agent } = await loadFixture(gatewayFixture);
+
+        await firewall.connect(owner).revokeAgent(agent.address);
+
+        await expect(
+          firewall.connect(agent).fundGateway(agent.address, usdc(100))
+        )
+          .to.be.revertedWithCustomError(firewall, "AgentIsRevoked")
+          .withArgs(agent.address);
+      });
+
+      it("blocks an unregistered agent", async function () {
+        const { firewall, otherAgent } = await loadFixture(gatewayFixture);
+
+        await expect(
+          firewall.connect(otherAgent).fundGateway(otherAgent.address, usdc(100))
+        )
+          .to.be.revertedWithCustomError(firewall, "AgentNotRegistered")
+          .withArgs(otherAgent.address);
+      });
+
+      it("blocks a zero amount", async function () {
+        const { firewall, agent } = await loadFixture(gatewayFixture);
+
+        await expect(
+          firewall.connect(agent).fundGateway(agent.address, 0)
+        ).to.be.revertedWithCustomError(firewall, "ZeroAmount");
+      });
+
+      it("blocks when the agent balance is too low", async function () {
+        const { firewall, owner, agent } = await loadFixture(gatewayFixture);
+
+        // Drain the firewall balance so budget is no longer the binding limit.
+        await firewall.connect(owner).withdraw(agent.address, usdc(5000));
+
+        await expect(
+          firewall.connect(agent).fundGateway(agent.address, usdc(100))
+        )
+          .to.be.revertedWithCustomError(firewall, "InsufficientAgentBalance")
+          .withArgs(usdc(100), 0);
+      });
+
+      it("reverts the whole top up if the gateway rejects the deposit", async function () {
+        const { firewall, agent, gateway } = await loadFixture(gatewayFixture);
+
+        await gateway.setShouldRevert(true);
+
+        await expect(
+          firewall.connect(agent).fundGateway(agent.address, usdc(100))
+        ).to.be.revertedWithCustomError(gateway, "MockGatewayRejected");
+
+        // Budget and balance must be untouched, not half applied.
+        const p = await firewall.getPolicy(agent.address);
+        expect(p.periodSpent).to.equal(0);
+        expect(await firewall.balanceOfAgent(agent.address)).to.equal(usdc(5000));
+      });
+    });
+
+    describe("shared budget with spend", function () {
+      it("charges merchant payments and gateway top ups to one budget", async function () {
+        const { firewall, agent, merchant } = await loadFixture(gatewayFixture);
+
+        // An agent must not be able to get 2x its cap by using both doors.
+        await firewall.connect(agent).spend(merchant.address, MAX_PER_TX);
+        await firewall.connect(agent).fundGateway(agent.address, MAX_PER_TX);
+
+        const p = await firewall.getPolicy(agent.address);
+        expect(p.periodSpent).to.equal(MAX_PER_TX * 2n);
+        expect(p.remainingInPeriod).to.equal(BUDGET - MAX_PER_TX * 2n);
+      });
+
+      it("lets a top up exhaust the budget so later merchant spend is blocked", async function () {
+        const { firewall, agent, merchant } = await loadFixture(gatewayFixture);
+
+        for (let i = 0; i < 4; i++) {
+          await firewall.connect(agent).fundGateway(agent.address, MAX_PER_TX);
+        }
+
+        await expect(
+          firewall.connect(agent).spend(merchant.address, usdc(1))
+        ).to.be.revertedWithCustomError(firewall, "ExceedsPeriodBudget");
+      });
+
+      it("frees both doors again when the period rolls", async function () {
+        const { firewall, agent } = await loadFixture(gatewayFixture);
+
+        for (let i = 0; i < 4; i++) {
+          await firewall.connect(agent).fundGateway(agent.address, MAX_PER_TX);
+        }
+
+        await time.increase(PERIOD + 1);
+
+        const [allowed, code] = await firewall.checkFundGateway(
+          agent.address,
+          MAX_PER_TX
+        );
+        expect(allowed).to.equal(true);
+        expect(code).to.equal(REASON.OK);
+      });
+    });
+
+    describe("checkFundGateway dry run", function () {
+      it("reports GATEWAY_NOT_CONFIGURED before a gateway is set", async function () {
+        const { firewall, agent } = await loadFixture(fundedFixture);
+
+        const [allowed, code] = await firewall.checkFundGateway(
+          agent.address,
+          usdc(100)
+        );
+        expect(allowed).to.equal(false);
+        expect(code).to.equal(REASON.GATEWAY_NOT_CONFIGURED);
+      });
+
+      it("agrees with fundGateway on every path", async function () {
+        const { firewall, owner, agent, gatewayAddress } =
+          await loadFixture(gatewayFixture);
+
+        // Each case: an amount, and the setup that should make it fail.
+        const cases = [
+          { amount: usdc(100), expected: REASON.OK },
+          { amount: 0n, expected: REASON.ZERO_AMOUNT },
+          { amount: MAX_PER_TX + 1n, expected: REASON.OVER_MAX_PER_TX },
+        ];
+
+        for (const c of cases) {
+          const [, code] = await firewall.checkFundGateway(
+            agent.address,
+            c.amount
+          );
+          expect(code, `amount ${c.amount}`).to.equal(c.expected);
+
+          // The real call must agree with the prediction.
+          const call = firewall.connect(agent).fundGateway(agent.address, c.amount);
+          if (c.expected === REASON.OK) {
+            await expect(call).to.not.be.reverted;
+          } else {
+            await expect(call).to.be.reverted;
+          }
+        }
+
+        // De-allowlisting the gateway is reported too.
+        await firewall
+          .connect(owner)
+          .setMerchantAllowed(agent.address, gatewayAddress, false);
+        const [allowed, code] = await firewall.checkFundGateway(
+          agent.address,
+          usdc(100)
+        );
+        expect(allowed).to.equal(false);
+        expect(code).to.equal(REASON.MERCHANT_NOT_ALLOWED);
+      });
+
+      it("reports REVOKED after the owner pulls the kill switch", async function () {
+        const { firewall, owner, agent } = await loadFixture(gatewayFixture);
+
+        await firewall.connect(owner).revokeAgent(agent.address);
+
+        const [allowed, code] = await firewall.checkFundGateway(
+          agent.address,
+          usdc(100)
+        );
+        expect(allowed).to.equal(false);
+        expect(code).to.equal(REASON.REVOKED);
+      });
+    });
+
+    it("keeps totalDeposited matching the contract token balance", async function () {
+      const { firewall, token, agent, merchant } =
+        await loadFixture(gatewayFixture);
+
+      await firewall.connect(agent).fundGateway(agent.address, usdc(100));
+      await firewall.connect(agent).spend(merchant.address, usdc(50));
+      await firewall.connect(agent).fundGateway(agent.address, usdc(25));
+
+      expect(await firewall.totalDeposited()).to.equal(
+        await token.balanceOf(await firewall.getAddress())
+      );
     });
   });
 

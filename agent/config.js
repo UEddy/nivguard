@@ -18,6 +18,14 @@ const ARC_TESTNET = {
   usdc: "0x3600000000000000000000000000000000000000",
   // Circle wallet blockchain enum for Arc testnet.
   circleBlockchain: "ARC-TESTNET",
+  // Circle's GatewayWallet, the deposit contract behind nanopayments.
+  // Cross checked against CHAIN_CONFIGS.arcTestnet in @circle-fin/x402-batching
+  // rather than copied from a doc page, so it cannot drift from the SDK.
+  gatewayWallet: "0x0077777d7EBA4688BDeF3E311b846F25870A19B9",
+  // Circle Gateway domain id for Arc testnet, used by the balances API.
+  gatewayDomain: 26,
+  // Chain name the x402 batching SDK knows Arc testnet by.
+  gatewayChainName: "arcTestnet",
 };
 
 const LOCALHOST = {
@@ -56,6 +64,10 @@ const REASON_CODES = {
   5: { key: "OVER_PERIOD_BUDGET", text: "amount would exceed the period budget" },
   6: { key: "INSUFFICIENT_BALANCE", text: "agent balance is too low" },
   7: { key: "ZERO_AMOUNT", text: "amount is zero" },
+  8: {
+    key: "GATEWAY_NOT_CONFIGURED",
+    text: "no Circle Gateway wallet has been set on the firewall",
+  },
 };
 
 function describeReason(code) {
@@ -78,6 +90,12 @@ const ERROR_TEXT = {
   ZeroAmount: () => "amount is zero",
   ZeroAddress: () => "a zero address was supplied",
   InvalidPolicy: () => "the policy is invalid",
+
+  // Gateway funding path.
+  GatewayNotConfigured: () =>
+    "no Circle Gateway wallet is set on the firewall, so top ups are switched off",
+  NotAgentOrOwner: (a) =>
+    `${a[0]} may not fund the gateway balance of agent ${a[1]}`,
 
   // Owner-side errors. These never fire on spend(), which is why they were
   // missing until an owner call reverted mid demo and printed raw hex.

@@ -28,6 +28,7 @@ gas-report.txt
 deployments/*.json
 !deployments/.gitkeep
 !deployments/arcTestnet.json
+!deployments/arcTestnet-nano.json
 
 # Editor and OS
 .vscode/

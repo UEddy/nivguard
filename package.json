@@ -19,6 +19,10 @@
     "pay:arc": "node scripts/agentPay.js",
     "preflight": "node scripts/preflight.js",
     "preflight:arc": "node scripts/preflight.js --network arcTestnet",
+    "nano:key": "node scripts/newNanoAgent.js",
+    "nano:setup": "node scripts/setupNano.js",
+    "nano:seller": "node scripts/nanoSeller.js",
+    "nano:demo": "node agent/nanoDemo.js",
     "sync:dashboard": "node scripts/syncDashboard.js",
     "web": "node scripts/serveWeb.js"
   },
@@ -36,6 +40,9 @@
     "hardhat": "^2.29.0"
   },
   "dependencies": {
-    "@circle-fin/developer-controlled-wallets": "^10.8.0"
+    "@circle-fin/developer-controlled-wallets": "^10.8.0",
+    "@circle-fin/x402-batching": "^3.3.0",
+    "@x402/evm": "^2.21.0",
+    "viem": "^2.55.11"
   }
 }

@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IGatewayWallet} from "./interfaces/IGatewayWallet.sol";
 
 /// @title SpendFirewall
 /// @notice Onchain spend firewall for AI agents. A business deposits USDC and
@@ -33,6 +34,7 @@ contract SpendFirewall is Ownable, ReentrancyGuard {
     uint8 public constant REASON_OVER_PERIOD_BUDGET = 5;
     uint8 public constant REASON_INSUFFICIENT_BALANCE = 6;
     uint8 public constant REASON_ZERO_AMOUNT = 7;
+    uint8 public constant REASON_GATEWAY_NOT_CONFIGURED = 8;
 
     // ---------------------------------------------------------------------
     // Errors
@@ -48,6 +50,8 @@ contract SpendFirewall is Ownable, ReentrancyGuard {
     error ZeroAmount();
     error ZeroAddress();
     error InvalidPolicy();
+    error GatewayNotConfigured();
+    error NotAgentOrOwner(address caller, address agent);
 
     // ---------------------------------------------------------------------
     // Types
@@ -74,6 +78,14 @@ contract SpendFirewall is Ownable, ReentrancyGuard {
 
     /// @notice USDC ERC-20 interface, 6 decimals.
     IERC20 public immutable usdc;
+
+    /// @notice Circle's GatewayWallet, the deposit contract behind nanopayments.
+    /// @dev Settable rather than immutable on purpose. The address is a Circle
+    ///      deployment that differs per chain and does not exist at all on the
+    ///      local hardhat node, so a constructor argument would force every
+    ///      local deploy to invent one. Zero means gateway funding is simply
+    ///      switched off, and fundGateway reverts rather than burning budget.
+    address public gatewayWallet;
 
     mapping(address agent => Policy) private _policies;
     mapping(address agent => uint256 balance) private _balances;
@@ -132,6 +144,26 @@ contract SpendFirewall is Ownable, ReentrancyGuard {
     );
 
     event AgentRevoked(address indexed agent);
+
+    /// @notice Emitted when the owner points the firewall at a GatewayWallet.
+    event GatewayWalletUpdated(address indexed previous, address indexed current);
+
+    /// @notice Emitted when budget leaves the firewall into an agent's Gateway
+    ///         balance, to be spent later as offchain nanopayments.
+    /// @dev Deliberately distinct from SpendAuthorized. A SpendAuthorized event
+    ///      means the money reached a named merchant and the story is over. A
+    ///      GatewayFunded event means the money entered a pool that this
+    ///      contract can no longer see, and the individual nanopayments drawn
+    ///      from it will never appear onchain one by one. An auditor reading
+    ///      the log needs to be able to tell those two things apart, so they
+    ///      are two events rather than one with a flag.
+    event GatewayFunded(
+        address indexed agent,
+        address indexed gateway,
+        uint256 amount,
+        uint256 periodSpent,
+        uint256 remainingInPeriod
+    );
 
     // ---------------------------------------------------------------------
     // Constructor
@@ -222,6 +254,16 @@ contract SpendFirewall is Ownable, ReentrancyGuard {
 
         _allowlist[agent][merchant] = allowed;
         emit MerchantAllowlisted(agent, merchant, allowed);
+    }
+
+    /// @notice Point the firewall at Circle's GatewayWallet, or set the zero
+    ///         address to switch gateway funding off entirely.
+    /// @dev Changing this does not move any funds. Balances already credited to
+    ///      an agent inside the old gateway stay where they are.
+    function setGatewayWallet(address gatewayWallet_) external onlyOwner {
+        address previous = gatewayWallet;
+        gatewayWallet = gatewayWallet_;
+        emit GatewayWalletUpdated(previous, gatewayWallet_);
     }
 
     /// @notice Revoke an agent. Takes effect immediately. The agent cannot
@@ -316,6 +358,83 @@ contract SpendFirewall is Ownable, ReentrancyGuard {
         );
     }
 
+    /// @notice Move budget out of the firewall and into the agent's Circle
+    ///         Gateway balance, so the agent can pay for things in offchain
+    ///         nanopayments too small to be worth a transaction each.
+    ///
+    /// @dev Every policy check that spend() runs, this runs, against the same
+    ///      period budget and the same per transaction cap. The GatewayWallet
+    ///      address is treated as the destination, so the owner has to
+    ///      allowlist it exactly like any other merchant before an agent can
+    ///      top up. Gateway funding is therefore opt in per agent, and
+    ///      revoking an agent kills its top ups along with its spending.
+    ///
+    ///      Sharing one budget with spend() is the point. An agent cannot get
+    ///      around a 3 USDC daily cap by taking 3 USDC of merchant payments and
+    ///      then another 3 USDC into the nanopayment pool. Total outflow is
+    ///      what the policy caps, whichever door it leaves by.
+    ///
+    ///      What this does NOT do, and cannot: gate the individual
+    ///      nanopayments. Those are offchain EIP-3009 authorizations that
+    ///      Circle batches and settles, so no onchain call exists for this
+    ///      contract to sit in front of. Once funds are in the Gateway balance
+    ///      the agent is the depositor and can spend or withdraw them without
+    ///      asking. The firewall controls the tap, not each drop.
+    ///
+    /// @param agent The agent whose policy is charged and whose Gateway
+    ///        balance is credited.
+    /// @param amount Amount to move, 6 decimals.
+    function fundGateway(address agent, uint256 amount) external nonReentrant {
+        // The agent parameter is not an authorisation. Without this check
+        // anyone could push another agent's funds into the gateway and burn
+        // that agent's budget for it. The owner is allowed because it can
+        // already deposit and withdraw on the agent's behalf.
+        if (msg.sender != agent && msg.sender != owner()) {
+            revert NotAgentOrOwner(msg.sender, agent);
+        }
+
+        address gateway = gatewayWallet;
+        if (gateway == address(0)) revert GatewayNotConfigured();
+
+        (uint8 reason, uint48 windowStart, uint128 spentInWindow) =
+            _evaluate(agent, gateway, amount);
+
+        if (reason != REASON_OK) _revertFor(agent, gateway, amount, reason, spentInWindow);
+
+        Policy storage p = _policies[agent];
+
+        uint128 newSpent = spentInWindow + uint128(amount);
+        p.periodSpent = newSpent;
+        p.periodStart = windowStart;
+
+        uint256 newBalance = _balances[agent] - amount;
+        _balances[agent] = newBalance;
+        totalDeposited -= amount;
+
+        // State is fully settled before the external calls below, so a
+        // misbehaving gateway cannot re-enter into a stale budget. The
+        // nonReentrant guard is belt and braces on top of that.
+        //
+        // depositFor pulls from this contract but credits the agent, which is
+        // what lets the agent sign nanopayment authorizations against a pool
+        // it was never trusted to custody directly.
+        usdc.forceApprove(gateway, amount);
+        IGatewayWallet(gateway).depositFor(address(usdc), agent, amount);
+
+        // Leave no standing allowance behind. depositFor consumes exactly
+        // `amount`, so this normally writes zero over zero, but an allowance
+        // from the firewall to anything is worth clearing rather than trusting.
+        usdc.forceApprove(gateway, 0);
+
+        emit GatewayFunded(
+            agent,
+            gateway,
+            amount,
+            newSpent,
+            p.budgetPerPeriod - newSpent
+        );
+    }
+
     // ---------------------------------------------------------------------
     // Views
     // ---------------------------------------------------------------------
@@ -330,6 +449,24 @@ contract SpendFirewall is Ownable, ReentrancyGuard {
         uint256 amount
     ) external view returns (bool allowed, uint8 reasonCode) {
         (reasonCode, , ) = _evaluate(agent, merchant, amount);
+        allowed = reasonCode == REASON_OK;
+    }
+
+    /// @notice Non reverting dry run of a gateway top up, the counterpart to
+    ///         checkSpend. Same shape so the runner can treat both the same.
+    /// @return allowed True if fundGateway would succeed right now.
+    /// @return reasonCode REASON_OK, or the first failing check.
+    ///         REASON_GATEWAY_NOT_CONFIGURED if no gateway has been set.
+    function checkFundGateway(address agent, uint256 amount)
+        external
+        view
+        returns (bool allowed, uint8 reasonCode)
+    {
+        address gateway = gatewayWallet;
+        if (gateway == address(0)) {
+            return (false, REASON_GATEWAY_NOT_CONFIGURED);
+        }
+        (reasonCode, , ) = _evaluate(agent, gateway, amount);
         allowed = reasonCode == REASON_OK;
     }
 

@@ -160,6 +160,21 @@ npm run web              # serve the dashboard at http://localhost:8080
 The same narrative runs offline against a local Hardhat node with `npm run
 demo`, which substitutes a local signer for Circle and needs no API key.
 
+## Nanopayments
+
+On the `feat/nanopayments` branch the firewall also gates the one onchain step
+in Circle Nanopayments: the Gateway deposit. `fundGateway` runs the same policy
+checks as `spend`, against the same period budget, so an agent's nanopayment
+float can only be filled through the firewall.
+
+Nanopayments themselves are offchain EIP-3009 authorizations that Circle
+batches, so they cannot be gated by a contract call and this does not pretend
+to. The firewall bounds the pool, not the drops. A recorded Arc testnet run
+showed 2 gated top ups authorising 12 sub-cent nanopayments, with the third top
+up blocked on budget.
+
+See [docs/NANOPAYMENTS.md](docs/NANOPAYMENTS.md).
+
 ## Deployed addresses
 
 Arc testnet, chain ID `5042002`, explorer https://testnet.arcscan.app

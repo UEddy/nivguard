@@ -35,6 +35,15 @@ class LocalSigner {
     const receipt = await tx.wait();
     return { hash: tx.hash, blockNumber: receipt.blockNumber };
   }
+
+  /// Submit fundGateway(agent, amount), the nanopayment top up path.
+  /// Same contract, same policy, different destination.
+  async fundGateway(firewall, amount) {
+    const contract = firewall.connect(this._signer);
+    const tx = await contract.fundGateway(this.address, amount);
+    const receipt = await tx.wait();
+    return { hash: tx.hash, blockNumber: receipt.blockNumber };
+  }
 }
 
 module.exports = { LocalSigner };
