@@ -1,10 +1,16 @@
 # Funding nanopayments through the firewall
 
-This branch extends NivGuard so an agent's Circle Gateway balance can only be
-filled by the firewall, under the same policy that governs its merchant
-payments.
+This extends NivGuard so an agent's Circle Gateway balance can only be filled by
+the firewall, under the same policy that governs its merchant payments.
 
 Status: working end to end on Arc testnet against the real Circle Gateway.
+
+**This is v2, a separate deployment at
+[`0xBB7c199A21763426F2B259042d7DD8F2Ccb59c1b`](https://testnet.arcscan.app/address/0xBB7c199A21763426F2B259042d7DD8F2Ccb59c1b?tab=contract).**
+The recorded submission demo, the video, the dashboard and
+[DEMO-OUTPUT.md](DEMO-OUTPUT.md) are all v1 at
+[`0x28412A523b9e1D13b1D108bF39Ab3A49035cd248`](https://testnet.arcscan.app/address/0x28412A523b9e1D13b1D108bF39Ab3A49035cd248?tab=contract),
+which does not have `fundGateway` and was not touched when v2 was deployed.
 
 ## The constraint that shapes everything
 
@@ -135,8 +141,10 @@ glossed.
 
 ## Recorded run
 
-Arc testnet, firewall `0xBB7c199A21763426F2B259042d7DD8F2Ccb59c1b`,
-agent `0x0A19cf8a11a3e43D7Ab88Dd528a796E31C5bb571`,
+Arc testnet, firewall
+[`0xBB7c199A21763426F2B259042d7DD8F2Ccb59c1b`](https://testnet.arcscan.app/address/0xBB7c199A21763426F2B259042d7DD8F2Ccb59c1b?tab=contract),
+agent
+[`0x0A19cf8a11a3e43D7Ab88Dd528a796E31C5bb571`](https://testnet.arcscan.app/address/0x0A19cf8a11a3e43D7Ab88Dd528a796E31C5bb571),
 policy 0.5 USDC per hour, max 0.2 USDC per top up.
 
 | step | outcome |
