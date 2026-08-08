@@ -5,16 +5,14 @@
 [![live dashboard](https://img.shields.io/badge/live%20dashboard-nivguard.netlify.app-2ea44f)](https://nivguard.netlify.app)
 [![mirror](https://img.shields.io/badge/mirror-GitHub%20Pages-6e7781)](https://ueddy.github.io/nivguard/)
 [![verified contract](https://img.shields.io/badge/verified%20contract-testnet.arcscan.app-1f6feb)](https://testnet.arcscan.app/address/0x28412A523b9e1D13b1D108bF39Ab3A49035cd248?tab=contract)
-[![demo video](https://img.shields.io/badge/demo%20video-watch-red)](REPLACE_WITH_VIDEO_URL)
-
-<!-- Demo video: replace both occurrences of REPLACE_WITH_VIDEO_URL below and above. -->
+[![demo video](https://img.shields.io/badge/demo%20video-watch-red)](https://drive.google.com/file/d/1TKzJTF6pL1BpeV_BjHKI5-Ev_WM4kxNg/view)
 
 | | |
 | --- | --- |
 | Live dashboard | **https://nivguard.netlify.app** |
 | Mirror | https://ueddy.github.io/nivguard/ |
 | Verified contract | [`0x28412A523b9e1D13b1D108bF39Ab3A49035cd248`](https://testnet.arcscan.app/address/0x28412A523b9e1D13b1D108bF39Ab3A49035cd248?tab=contract) on Arc testnet |
-| Demo video | REPLACE_WITH_VIDEO_URL |
+| Demo video | https://drive.google.com/file/d/1TKzJTF6pL1BpeV_BjHKI5-Ev_WM4kxNg/view |
 
 ## What it does
 
@@ -133,6 +131,10 @@ Not used: Circle Nanopayments, Gateway, CCTP, and Paymaster are not wired into
 this project and are not claimed. The owner side signs with a local key via
 Hardhat and ethers; only the agent is under Circle custody, which is the part
 that matters, since the agent is the untrusted spender.
+
+This project was built using Circle Skills in Claude Code, which is part of Agent
+Stack. That is development tooling, not a runtime dependency; nothing in the
+deployed system calls it.
 
 ## Run it locally
 
